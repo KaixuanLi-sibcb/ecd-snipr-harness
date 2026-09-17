@@ -1,0 +1,5 @@
+{
+  "sheet": "synthetic",
+  "header_row": 1,
+  "fields": {"local_id": "A", "gene_raw": "B", "snipr_assay_raw": "C", "readout_raw": "D"}
+}

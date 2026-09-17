@@ -1,0 +1,21 @@
+{
+  "name": "ecd-snipr-harness",
+  "version": "0.3.0",
+  "package_paths": [
+    "manifest.json",
+    "LICENSE",
+    "SKILL.md",
+    "README.md",
+    "CHANGELOG.md",
+    "pyproject.toml",
+    "Makefile",
+    ".gitignore",
+    ".github",
+    "agents",
+    "references",
+    "schemas",
+    "scripts",
+    "tests",
+    "examples"
+  ]
+}

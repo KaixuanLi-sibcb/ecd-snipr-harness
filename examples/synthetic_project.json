@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "configuration": "antibody_sender_antigen_receiver",
+  "description": "Entirely synthetic software fixture. No lab construct, natural protein or receptor performance claims.",
+  "proteins": [
+    {
+      "protein_id": "SYNTHETIC-001",
+      "gene": "SYNTHETIC_GENE",
+      "accession": "SYNTHETIC-001",
+      "isoform": "SYNTHETIC-001-1",
+      "taxon_id": 9606,
+      "sequence": "ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY",
+      "location": "plasma_membrane",
+      "topology": "type_i",
+      "candidate_policy": "full_ecd_and_domains",
+      "evidence": {"kind": "synthetic_fixture", "source": "synthetic://software-tests", "version": "1"},
+      "features": [
+        {"kind": "signal_peptide", "start": 1, "end": 10, "evidence": {"kind": "synthetic_fixture", "source": "synthetic://software-tests", "version": "1"}},
+        {"kind": "extracellular", "start": 11, "end": 76, "evidence": {"kind": "synthetic_fixture", "source": "synthetic://software-tests", "version": "1"}},
+        {"kind": "transmembrane", "start": 77, "end": 86, "evidence": {"kind": "synthetic_fixture", "source": "synthetic://software-tests", "version": "1"}},
+        {"kind": "cytoplasmic", "start": 87, "end": 95, "evidence": {"kind": "synthetic_fixture", "source": "synthetic://software-tests", "version": "1"}},
+        {"kind": "domain", "name": "synthetic-domain-A", "start": 15, "end": 40, "evidence": {"kind": "synthetic_fixture", "source": "synthetic://software-tests", "version": "1"}},
+        {"kind": "domain", "name": "synthetic-domain-B", "start": 45, "end": 70, "evidence": {"kind": "synthetic_fixture", "source": "synthetic://software-tests", "version": "1"}},
+        {"kind": "epitope", "name": "synthetic-epitope-B", "antibody_id": "synthetic-reagent", "start": 50, "end": 55, "evidence": {"kind": "synthetic_fixture", "source": "synthetic://software-tests", "version": "1"}}
+      ],
+      "candidate_regions": [
+        {"start": 15, "end": 40, "rationale": "Synthetic sourced domain alternative to test explicit epitope loss", "evidence": {"kind": "synthetic_fixture", "source": "synthetic://software-tests", "version": "1"}}
+      ]
+    }
+  ],
+  "scaffold": null,
+  "existing_constructs": [],
+  "observations": [],
+  "evidence_records_v2": [],
+  "reviews": []
+}

@@ -1,0 +1,38 @@
+---
+name: ecd-snipr-harness
+description: Design and review sourced human membrane-protein extracellular fragments for a laboratory SNIPR Antigen-Receiver paired with an Antibody-Sender. Use for batch ECD candidate planning, per-target screening recommendations over a defined protein set, scaffold-aware fusion review, epitope-retention checks, and context-specific experimental evidence tracking. Not for antibody design, antigen-sender qDis engineering, therapeutic target ranking, or unsupported SNIPR success prediction.
+---
+
+# ECD-SNIPR Harness
+
+## Scope and routing
+Target configuration is **Antibody-Sender -> Antigen-Receiver**. The antigen is on the SNIPR receiving cell, not on the LC-bearing sending scaffold. Treat literature on antigen-sender qDis as background only.
+
+The default main line is batch screening: **a user target list or a public human UniProt set -> identity resolution and explicit analysis-reference selection -> batch fetch/cache/normalization -> sourced antigen fragments -> a screening recommendation per target -> set-level summary.** Real scaffold assembly and experimental-endpoint linkage are optional downstream branches (`run`); their absence never blocks screening, and no scaffold, linker, review or experiment label may be fabricated to keep a run going.
+
+Read [workflow](references/workflow.md) for execution and task-state rules; [data contracts](references/data-contracts.md) before mapping inputs or assembling sequences; [screening criteria](references/screening-criteria.md) for the recommendation decision table; [assay interpretation](references/assay-interpretation.md) for experimental data; [evidence and methods](references/evidence-and-methods.md) when explaining predictions or citations. CLI examples are in [README](README.md).
+
+When the actual scaffold is not yet supplied, read the [source-checked public reference descriptions](references/public-reference-architecture.md). CN114437232B / WO2022095916A1 belong to one patent family, not independent replication; Addgene #79127 is a synNotch reference, not the current Ag-SNIPR. Never use sender SEQ ID NO.5/6 as the receiver scaffold. Continue ECD analysis while keeping assembly pending.
+
+## Required behavior
+1. Build the analysis set honestly. Record the data version, query, inclusion rules and fetch completeness. Accessions are processed directly; gene names are mapped with recorded evidence, ambiguity preserved, no guessing, no row dropped. Multi-pass, GPI, organelle and under-annotated entries get explicit dispositions — nothing is silently deleted. Distinguish membrane-set membership, natural cell-surface target, and design-evaluation scope; secreted proteins are a separately counted extension set.
+2. Screening may explicitly select the database canonical/reference sequence as the analysis reference with a recorded rationale. This is not experimental isoform confirmation, which still gates final fusion assembly. Genuine identity ambiguity, version conflicts and non-canonical coordinate problems are preserved, never smoothed over.
+3. Give each in-scope target one screening_recommendation from the transparent decision table: `standard_candidate` / `conditional_candidate` / `no_standard_route` (route limitation, not "unusable forever") / `insufficient_evidence` (missing core information, not a biological failure). A standard candidate needs positive sequence, topology and boundary evidence — never a mere "no risk found". Missing epitope or contextual-risk literature is reported as not evaluated, not used to downgrade a candidate with reliable boundaries.
+4. Every recommendation carries actual design content: reference identity, isoform, candidate ID, antigen form, exact 1-based coordinates, length, candidate sequence, selection rationale, main risks, missing info and alternates with reasons. Type-II orientation change, GPI mature-boundary check and multi-pass external-domain conditionality stay distinct. No loop stitching, no random window-sliding, no default mutation optimization, no mechanical truncation, no forced uniform candidate counts.
+5. Coordinate errors and retained native TM/SP/cytoplasmic tail remain blocking. Length, cysteine and potential N-glycosylation motifs are review warnings, not pass/fail thresholds. Fuzzy secondary annotations are explicitly deferred and recorded; a sole essential fuzzy annotation still blocks.
+6. Use the **actual laboratory scaffold** with explicit module sequences/order/version, signal policy, host, reporter and verified junctions for the assembly branch. Without it, deliver candidate-fragment FASTA plus junction notes and export no fusion. Require a named, authorized human review for assembly; the agent never self-approves.
+7. Keep four endpoints separate: surface expression, recognition retention, basal activation, induced response. Associate each observation with a specific construct, sender/antibody, batch, replicate and condition. Blank is missing; Y/N is not a functional label.
+8. Lead reports with research conclusions and coverage with explicit denominators — not approval counts. Label outputs 候选设计覆盖/初筛建议, never experimental success rates; label small runs pilot.
+
+## Execution
+Use `python3 scripts/ecd_snipr_cli.py --help`. Core and offline tests require Python >=3.10, no external packages. Always use a private output directory outside the installed skill.
+
+- `screen --list targets.tsv --cache CACHE --outdir OUT [--pilot] [--resume]` chains build-set -> normalize -> screening -> summary. `build-set --query` builds from a public UniProt query; `screen --set SETDIR` screens a previously built set.
+- `run --resume` (legacy project branch) reuses only hash-verified bundles and preserves corrupted/failed attempts. Incomplete acquisition or processing is marked `partial` and reported as such, never as a full run (CLI exit code 3).
+- Use `inspect` and `map` for workbook intake, `normalize-uniprot` for local public annotations, and optional `fetch-uniprot` only for explicitly public accessions. Never upload private workbook contents, scaffold sequences or unpublished constructs to prediction services without specific authorization.
+- Lab experience rules import via `--lab-rules` with provenance; when absent, outputs state 尚未纳入.
+
+Before reporting completion run `make all-checks-offline` in the source package and `verify-run` for produced bundles. DNA synthesis orders, publishing and model training are separate actions, not implied by this skill.
+
+## Partial completion and stopping points
+Missing scaffold stops fusion export only. Missing/ambiguous isoform or invalid coordinates block that candidate, not unrelated proteins. A single item's fetch or processing failure is recorded and never halts the batch. Uninterpretable assay fields stay unresolved. Conflicts remain visible. If a predictor or API is not run, report that fact. No trained ECD-SNIPR function predictor is included.

@@ -1,0 +1,31 @@
+{
+  "record_type": "public_reference_architecture",
+  "reference_id": "qdis-synnotch-addgene79127-public-reference",
+  "status": "reference_only",
+  "checked_at": "2026-09-16",
+  "assembly_authorized": false,
+  "verification_scope": "source_descriptions_only_not_independent_experimental_validation",
+  "source_relationship": "CN114437232B and WO2022095916A1 are one patent family, not independent replications",
+  "performance_transfer_to_current_lab": "not_established",
+  "receiver_scope_note": "Patent descriptions also include ACE2 recognition modules; this does not validate arbitrary antigen-ECD receivers or the current antibody-sender configuration",
+  "current_lab_equivalence": "unconfirmed",
+  "project_configuration": "antibody_sender_antigen_receiver",
+  "reference_configuration": "antigen_sender_recognition_receiver",
+  "sources": [
+    {"source_id": "CN114437232B", "url": "https://patents.google.com/patent/CN114437232B/zh", "version": "grant-publication-2023-11-24", "locators": ["Plasmids required for quantitative display", "Example 1", "Example 4", "SEQ ID NO.5/6 description"]},
+    {"source_id": "WO2022095916A1", "url": "https://patents.google.com/patent/WO2022095916A1/en", "version": "A1-publication", "locators": ["Plasmids required for quantitative display", "Example 1", "SEQ ID NO.5/6 description"]},
+    {"source_id": "Addgene_79127", "url": "https://www.addgene.org/79127/", "version": "page-accessed-2026-09-16", "locators": ["Purpose", "Gene/Insert", "Sequence Information"]}
+  ],
+  "components": [
+    {"component": "public_plasmid", "value": "pHR_pGK_LaG17_synNotch_Gal4VP64", "sources": ["Addgene_79127"], "evidence_status": "documented_public_reference"},
+    {"component": "public_recognition_module", "value": "LaG17 anti-GFP nanobody; not an antigen-ECD receiver payload", "sources": ["Addgene_79127"], "evidence_status": "documented_public_reference"},
+    {"component": "reference_receiver_core", "value": "mouse Notch1-derived segment with Gal4-VP64", "sources": ["CN114437232B", "WO2022095916A1"], "evidence_status": "documented_public_reference"},
+    {"component": "reference_receiver_tag", "value": "myc at the receptor front end", "sources": ["CN114437232B", "WO2022095916A1"], "evidence_status": "documented_public_reference"},
+    {"component": "reference_host", "value": "K562 in the principal receiver implementation; another imaging example uses a HEK293T receiver", "sources": ["CN114437232B"], "evidence_status": "documented_public_reference"},
+    {"component": "reference_reporter_variants", "value": ["BFP", "hCD8"], "sources": ["WO2022095916A1"], "evidence_status": "documented_public_reference", "note": "Distinct reporter-system contexts, not assumed contents of plasmid 79127 or current lab constructs"},
+    {"component": "excluded_sender_sequences", "value": "SEQ ID NO.5 is PDGFR transmembrane/intracellular segment plus LC; NO.6 encodes the sender module", "sources": ["CN114437232B", "WO2022095916A1"], "evidence_status": "documented_public_reference", "allowed_as_receiver_scaffold": false}
+  ],
+  "unknown_for_current_lab": ["receiver_core_sequence_and_boundaries", "antigen_insertion_site", "signal_peptide", "linkers", "tag_positions", "current_host", "reporter_variant", "current_construct_version"],
+  "full_public_sequence_review": "not_performed; source pages identify the reference, not the lab sequence",
+  "policy": "Continue ECD annotation and candidate feasibility independently. Do not auto-fill actual scaffold fields or export a final fusion from this catalog."
+}

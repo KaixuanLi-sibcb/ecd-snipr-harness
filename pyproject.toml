@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ecd-snipr-harness"
+version = "0.3.0"
+description = "Evidence-bounded antigen fragment design for SNIPR receivers"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools]
+package-dir = {"" = "scripts"}
+packages = ["ecd_snipr"]
+
+# The installable agent skill is the allowlisted ZIP, not a Python wheel.

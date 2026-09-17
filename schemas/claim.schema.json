@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ECD-SNIPR native contextual claim",
+  "type": "object",
+  "required": ["claim_id", "claim_type", "subject_id", "status", "evidence_class"],
+  "properties": {
+    "claim_id": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "claim_type": {"enum": ["reference_sequence", "candidate_design", "candidate_availability", "assay_observation", "contextual_criterion"]},
+    "subject_id": {"type": "string"},
+    "status": {"enum": ["recorded", "computed", "missing", "error", "unresolved"]},
+    "evidence_class": {"enum": ["curated_annotation", "prediction", "local_experiment", "synthetic_fixture", "deterministic_rule", "scoped_source_records", "unknown"]},
+    "source": {"type": "object"},
+    "context": {"type": "object"},
+    "review_key": {"type": "string"}
+  },
+  "description": "Native claims do not extend or impersonate EvidenceRecord v2; source observation and inference are explicitly separate."
+}

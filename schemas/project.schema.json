@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ECD-SNIPR Project v1",
+  "type": "object",
+  "required": ["schema_version", "configuration", "proteins"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "configuration": {"const": "antibody_sender_antigen_receiver"},
+    "proteins": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/protein"}},
+    "scaffold": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/scaffold"}]},
+    "existing_constructs": {"type": "array", "items": {"type": "object", "required": ["construct_id", "protein_id"], "properties": {"construct_id": {"type": "string"}, "protein_id": {"type": "string"}, "start": {"type": "integer", "minimum": 1}, "end": {"type": "integer", "minimum": 1}, "antigen_sequence": {"type": "string"}, "fusion_sequence": {"type": "string"}, "scaffold_id": {"type": "string"}, "scaffold_version": {"type": "string"}, "source_ref": {"type": "object"}}}},
+    "observations": {"type": "array", "items": {"$ref": "#/$defs/observation"}},
+    "reviews": {"type": "array", "items": {"$ref": "#/$defs/review"}},
+    "evidence_records_v2": {"type": "array", "description": "Lossless original v2 records. Runtime validates the closed legacy contract."},
+    "rules": {"type": "object", "properties": {"short_length": {"type": "integer", "minimum": 1}, "long_length": {"type": "integer", "minimum": 1}, "cysteine_fraction": {"type": "number", "exclusiveMinimum": 0, "maximum": 1}}}
+  },
+  "$defs": {
+    "evidence": {"type": "object", "properties": {"kind": {"enum": ["curated_annotation", "prediction", "local_experiment", "synthetic_fixture"]}, "source": {"type": "string"}, "version": {"type": "string"}}, "description": "Missing provenance is retained for diagnostics but blocks assembly."},
+    "feature": {"type": "object", "required": ["kind"], "properties": {"kind": {"type": "string"}, "start": {"type": "integer", "minimum": 1}, "end": {"type": "integer", "minimum": 1}, "boundary_status": {"enum": ["exact", "fuzzy"]}, "evidence": {"$ref": "#/$defs/evidence"}}},
+    "region": {"type": "object", "properties": {"start": {"type": "integer", "minimum": 1}, "end": {"type": "integer", "minimum": 1}, "boundary_status": {"enum": ["exact", "fuzzy"]}, "antigen_form_type": {"enum": ["full_ecd", "mature_secreted", "mature_gpi", "shed_product", "domain_fragment"]}, "rationale": {"type": "string"}, "evidence": {"$ref": "#/$defs/evidence"}, "release_evidence": {"$ref": "#/$defs/evidence"}, "release_context": {"type": "string"}}},
+    "consideration": {"type": "object", "required": ["kind", "status", "scope"], "properties": {"kind": {"enum": ["processing", "native_shedding", "junction_cleavage", "oligomerization", "aggregation", "culture_interference"]}, "status": {"enum": ["reported", "not_observed_in_context", "missing", "not_applicable"]}, "scope": {"enum": ["native_protein", "receiver_construct", "assay_context"]}, "reason": {"type": "string"}, "evidence": {"$ref": "#/$defs/evidence"}, "context": {"type": "object"}, "start": {"type": "integer", "minimum": 1}, "end": {"type": "integer", "minimum": 1}}},
+    "protein": {"type": "object", "required": ["protein_id"], "properties": {"protein_id": {"type": "string", "minLength": 1}, "gene": {"type": "string"}, "accession": {"type": "string"}, "isoform": {"type": "string"}, "isoform_ambiguous": {"type": "boolean"}, "taxon_id": {"type": "integer"}, "sequence": {"type": "string"}, "location": {"type": "string"}, "topology": {"enum": ["type_i", "type_ii", "gpi", "multi_pass", "secreted", "intracellular", "unknown"]}, "evidence": {"$ref": "#/$defs/evidence"}, "candidate_policy": {"enum": ["full_ecd_and_domains", "full_ecd_only"], "default": "full_ecd_only"}, "features": {"type": "array", "items": {"$ref": "#/$defs/feature"}}, "candidate_regions": {"type": "array", "items": {"$ref": "#/$defs/region"}}, "considerations": {"type": "array", "items": {"$ref": "#/$defs/consideration"}}}},
+    "module": {"type": "object", "required": ["role", "name"], "properties": {"role": {"type": "string"}, "name": {"type": "string"}, "sequence": {"type": "string"}, "source": {"type": "string"}}},
+    "scaffold": {"type": "object", "properties": {"scaffold_id": {"type": "string"}, "version": {"type": "string"}, "configuration": {"type": "string"}, "source": {"type": "string"}, "host_cell": {"type": "string"}, "reporter": {"type": "string"}, "status": {"enum": ["verified_local", "synthetic_fixture", "pending"]}, "signal_policy": {"type": "string"}, "junctions_verified": {"type": "boolean"}, "modules": {"type": "array", "items": {"$ref": "#/$defs/module"}}}},
+    "observation": {"type": "object", "required": ["observation_id"], "properties": {"observation_id": {"type": "string"}, "construct_id": {"type": "string"}, "endpoint": {"type": "string", "description": "Unknown raw endpoint names remain unresolved, not silently mapped."}, "raw_value": {}, "unit": {"type": "string"}, "context": {"type": "object"}, "source_ref": {"type": "object"}}},
+    "review": {"type": "object", "required": ["review_key"], "properties": {"review_key": {"type": "string"}, "candidate_id": {"type": "string"}, "decision": {"enum": ["pending", "approve", "reject"]}, "reviewer": {"type": "string"}, "reviewed_at": {"type": "string"}, "rationale": {"type": "string"}, "acknowledged_risks": {"type": "array", "items": {"type": "string"}}}}
+  }
+}

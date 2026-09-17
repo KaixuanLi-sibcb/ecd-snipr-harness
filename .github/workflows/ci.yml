@@ -1,0 +1,15 @@
+name: offline-contracts
+on: [push, pull_request]
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.10', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '${{ matrix.python }}'
+      - run: make all-checks-offline
+# Only synthetic local fixtures; never upload private run bundles as CI artifacts.

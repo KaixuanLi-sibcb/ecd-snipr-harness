@@ -1,0 +1,13 @@
+{
+  "configuration": "antibody_sender_antigen_receiver",
+  "scaffold_id": "",
+  "version": "",
+  "source": "",
+  "host_cell": "",
+  "reporter": "",
+  "status": "pending",
+  "signal_policy": "scaffold_signal_only",
+  "junctions_verified": false,
+  "modules": [],
+  "note": "Intentionally non-assemblable. Supply actual lab module sequences/order; do not use synthetic test sequences as a real scaffold."
+}

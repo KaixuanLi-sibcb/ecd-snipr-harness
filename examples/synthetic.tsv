@@ -1,0 +1,3 @@
+local_id	gene	SNIPR Assay Y/N	readout
+TEST1	SYNTHETIC_GENE	Y	
+TEST2	SYNTHETIC_GENE	N	0.8

@@ -1,0 +1,13 @@
+accession	gene	note
+P15391	CD19	type-I single-pass
+Q15116	PDCD1	type-I single-pass
+P18627	LAG3	type-I single-pass
+P04626	ERBB2	type-I single-pass
+P02786	TFRC	type-II single-pass
+P29965	CD40LG	type-II single-pass
+P61073	CXCR4	multi-pass GPCR
+P13987	CD59	GPI-anchored
+P08174	CD55	GPI-anchored
+P15692	VEGFA	secreted (extension set)
+P05231	IL6	secreted (extension set)
+P13726	TF	tissue factor type-I
