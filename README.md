@@ -2,35 +2,58 @@
 
 **Evidence-bounded antigen-fragment design for SNIPR receivers — at the scale of the human membrane proteome.**
 
-`ecd-snipr-harness` turns "a new membrane target arrived; which fragment should we use, and why?" into a batch-executable, fully traceable pipeline. For every target it delivers a concrete candidate fragment (coordinates + sequence + rationale + open issues), a screening recommendation, and a reconciled summary across the whole set.
+[![CI](https://github.com/KaixuanLi-sibcb/ecd-snipr-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/KaixuanLi-sibcb/ecd-snipr-harness/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python ≥ 3.10](https://img.shields.io/badge/python-≥3.10-blue.svg)](pyproject.toml)
+[![Version 0.3.1](https://img.shields.io/badge/version-0.3.1-208B83.svg)](CHANGELOG.md)
 
-Working configuration: **Antibody-Sender → Antigen-Receiver** — the antibody sits on the sender cell; the antigen fragment occupies the antigen-recognition position of the SNIPR receiver. The tool designs the *fragment*, not the antibody and not the sender construct.
+`ecd-snipr-harness` turns *"a new membrane target arrived — which fragment should we use, and why?"* into a batch-executable, fully traceable pipeline. Every target gets a concrete candidate fragment (coordinates · sequence · rationale · open issues), a four-class screening recommendation, and a reconciled coverage summary across the whole set.
 
-## What it does
+Working configuration: **Antibody-Sender → Antigen-Receiver** — the antibody sits on the sender cell; the antigen fragment occupies the antigen-recognition position of the SNIPR receiver. The tool designs the *fragment*, not the antibody, and not the sender construct.
 
-- Builds a defined analysis set from a user target list or a public UniProt query (identity resolution with recorded evidence; ambiguity preserved, never guessed, no row dropped).
-- Fetches, caches and normalizes UniProt annotations (topology, localization, signal peptide / propeptide / transmembrane / topological domains / domains / processing products), with content-addressed caching, resume, and per-item failure isolation.
-- Selects the analysis reference explicitly (database canonical/reference sequence, rationale recorded — distinct from experimental isoform confirmation, which is still required before any fusion assembly).
-- Generates source-bounded candidate antigen fragments by topology: type-I/II full ECDs, mature GPI forms, sourced shed forms, and sourced domain alternates for multi-pass proteins (extracellular loops are never stitched). No random window sliding, no default mutation "optimization", no mechanical truncation.
-- Classifies each reference with a transparent decision table — `standard_candidate` / `conditional_candidate` / `no_standard_route` / `insufficient_evidence` — with `reason_codes`, evidence, and missing information attached. Out-of-scope objects (`scope_status`) and technical failures (`processing_status`) are tracked separately, never disguised as biological conclusions.
-- Emits the research deliverables: `protein_screening.tsv`, `candidate_plan.tsv`, `candidates.json`, `candidate_fragments.fasta`, `summary.json` (all ratios carry explicit denominators), `PI_SUMMARY.md`, and a coverage figure with its source data.
+## Pipeline
 
-## What it does not do
+```mermaid
+flowchart LR
+    A["Target list<br/>or UniProt query"] --> B["<b>build-set</b><br/>identity resolution<br/>fetch · cache · normalize<br/>analysis-reference selection<br/>per-entry disposition"]
+    B --> C["<b>screen</b><br/>source-bounded candidates<br/>blocking checks<br/>four-class recommendation"]
+    C --> D["<b>deliverables</b><br/>design table · candidate FASTA<br/>summary.json · PI summary<br/>coverage figure"]
+    C -.->|"optional, gated by real scaffold<br/>+ human review"| E["fusion assembly &<br/>experiment linkage"]
+    classDef main fill:#E7F3F0,stroke:#208B83,color:#152433
+    classDef opt fill:#F3F6F8,stroke:#667685,stroke-dasharray:5 5,color:#152433
+    class A,B,C,D main
+    class E opt
+```
 
-- It does **not** predict experimental success. Screening coverage ≠ functional validation; surface expression, antibody recognition, basal activity and induced response remain separate experiments.
-- It does **not** fabricate fusion sequences: without a real, human-reviewed SNIPR scaffold, only candidate fragments and junction notes are delivered.
-- It does **not** run per-protein LLM reasoning, structure prediction (AlphaFold/ESM) or paid APIs in the batch pass; the first pass is fully deterministic.
-- Blocking checks (coordinate errors, retained native TM/SP/cytoplasmic tail) stay hard failures; length/cysteine/glycosylation-motif notes are warnings, not thresholds.
-- Optional lab-experience rules (`--lab-rules`) may annotate or downgrade, never upgrade; when absent, outputs state "not yet incorporated".
+Each reference is classified by a transparent decision table — no composite scores:
 
-## Requirements
+| Recommendation | Meaning |
+|---|---|
+| **standard_candidate** | A routine candidate with positive sequence/topology/boundary evidence |
+| **conditional_candidate** | A sourced candidate exists, but specific issues (orientation, processing, domain choice, …) need verification |
+| **no_standard_route** | No routine design under current routes — a route limitation, not a verdict on the protein |
+| **insufficient_evidence** | Core identity/topology/boundary evidence is missing — an evidence state, not a failure |
 
-Python ≥ 3.10, standard library only. No dependencies, no GPU, no network needed for the offline test suite.
+Out-of-scope objects (`scope_status`) and technical failures (`processing_status`) are tracked separately; nothing is silently dropped. Missing epitope or risk literature is reported as *not evaluated* — it never silently downgrades a well-bounded candidate.
+
+## Candidate rules by topology
+
+| Topology | Treatment |
+|---|---|
+| Type I | Full continuous ectodomain, mature form (signal peptide / propeptide removed) |
+| Type II | Same, plus an orientation flag for receiver attachment |
+| GPI-anchored | Mature-form boundaries checked; omega residue retained, GPI signal peptide removed |
+| Multi-pass | Extracellular loops are **never stitched**; only sourced external domains may be conditional alternates |
+| Shed / processed | Sourced processed forms may serve as alternates; fuzzy secondary annotations are deferred, not silently used for blocking |
+
+Blocking checks (coordinate errors, retained native TM/SP/cytoplasmic tail) stay hard failures. Length, cysteine count and glycosylation motifs are warnings, not thresholds.
 
 ## Quickstart
 
+Python ≥ 3.10, standard library only — no dependencies, no GPU, no network needed for the test suite.
+
 ```bash
-# Offline synthetic smoke test (no network)
+# Offline synthetic smoke test
 python3 scripts/ecd_snipr_cli.py smoke --outdir /tmp/ecd_smoke
 
 # Screen a target list (accessions or gene names; every row preserved)
@@ -44,36 +67,40 @@ python3 scripts/ecd_snipr_cli.py build-set \
 python3 scripts/ecd_snipr_cli.py screen --set sets/human_membrane --outdir runs/human_membrane
 ```
 
-Incomplete retrievals are marked `partial` and never reported as complete. `--resume` continues interrupted batches from the cache.
+Incomplete retrievals are marked `partial` and never reported as complete; `--resume` continues interrupted batches from the content-addressed cache. Optional lab-experience rules (`--lab-rules`) may annotate or downgrade a recommendation — never upgrade; when absent, outputs state *not yet incorporated*.
 
-## Tests
+## Outputs
+
+| File | Content |
+|---|---|
+| `protein_screening.tsv` | One row per analysis object: scope, topology, class, primary candidate, rationale, risks, missing info |
+| `candidate_plan.tsv` / `candidates.json` | Primary + alternate candidates: coordinates, length, sequence, rationale |
+| `candidate_fragments.fasta` | Fragment sequences (labelled `UNVALIDATED`) with junction notes |
+| `summary.json` | Set definition, completeness, per-unit counts, all ratios with explicit denominators |
+| `PI_SUMMARY.md` | Conclusion-first one-page summary |
+| `screening_overview.svg` (+ source data) | Disposition flow and topology × class coverage |
+
+## What it does not do
+
+- **No success prediction.** Screening coverage ≠ functional validation; expression, recognition, basal activity and induced response remain separate experiments.
+- **No fabricated constructs.** Without a real, human-reviewed SNIPR scaffold, only fragments and junction notes are delivered.
+- **No heavy machinery in the batch pass.** Fully deterministic first pass; no per-protein LLM reasoning, no AlphaFold/ESM, no paid APIs.
+
+## Development
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'
+python3 -m unittest discover -s tests -p 'test_*.py'   # 134 checks
+python3 scripts/manage_skill.py validate               # contract + privacy audit
+python3 scripts/manage_skill.py privacy-check
 ```
 
-124 checks (v0.3.0), including: screening completes with no scaffold/review/experiments; public-reference selection vs experimental-isoform confirmation stay distinct; missing optional risk literature does not blanket-downgrade; core sequence errors remain blocked; topology/mature-boundary/domain-alternate handling; multi-reference/multi-candidate/duplicate/out-of-scope counting; single-item failure isolation; legacy scaffold assembly and four-endpoint linkage unregressed.
-
-## Repository layout
-
 ```
-scripts/ecd_snipr/     core package (acquisition · screening · design · reporting · provenance …)
-scripts/ecd_snipr_cli.py    command-line entry point
-schemas/               input/claim JSON schemas
-references/            workflow, data contracts, screening criteria, validation policy
-examples/              synthetic fixtures and an example public target list
-tests/                 offline unittest suite
-agents/openai.yaml     agent harness declaration
-SKILL.md               skill-level task definition and boundaries
+scripts/ecd_snipr/   core package — acquisition · screening · design · reporting · provenance
+scripts/             CLI + packaging/privacy tooling
+schemas/ references/ examples/ tests/ agents/
 ```
 
-## Provenance and privacy
-
-Runs are content-addressed and checksummed (`verify-run` re-checks every artifact). Raw workbooks, private construct sequences and experimental results are private research data: they live outside the package, and the packaging allowlist plus `manage_skill.py` checks exclude them from any release. This repository contains code, schemas, documentation and synthetic/public examples only.
-
-## Versioning
-
-See [CHANGELOG.md](CHANGELOG.md). Current release: **0.3.0** (batch set-building, independent screening-recommendation layer, reconciled summary outputs; candidate engine and validity checks preserved from 0.2.x).
+Runs are content-addressed and checksummed (`verify-run` re-checks every artifact). Raw workbooks, private construct sequences and experimental results are private research data — they live outside the package and are excluded from every release by an allowlist plus automated audits. This repository contains code, schemas, documentation and synthetic/public examples only.
 
 ## License
 

@@ -17,7 +17,7 @@ import urllib.request
 from pathlib import Path
 from . import __version__
 from .common import digest, file_hash, now, read_json, write_json
-from .uniprot import fetch, normalize
+from .uniprot import RETRYABLE_HTTP, fetch, normalize, retry_delay
 
 ACCESSION_RE = re.compile(r"[A-Z0-9]{6,10}(?:-[0-9]+)?")
 SEARCH_URL = "https://rest.uniprot.org/uniprotkb/search"
@@ -149,27 +149,43 @@ def map_gene_name(name, cache, offline=False, refresh=False, opener=None, sleepe
     return dict(record, status=record["mapping_status"])
 
 
-def _query_with_retry(query, opener, sleeper):
-    """Return (hits, release, error); bounded retries, transient codes only."""
-    error = ""
+def _fetch_page_with_retry(query, opener, sleeper, size, cursor):
+    """One search page; bounded retries on transient codes only, honoring a
+    bounded Retry-After hint. Non-retryable HTTP errors raise immediately."""
     for attempt in range(3):
         try:
-            data, headers, _ = _search_page(query, opener)
-            release = headers.get("x-uniprot-release", headers.get("X-UniProt-Release", "unknown"))
-            hits = []
-            for entry in data.get("results", []):
-                genes = entry.get("genes") or [{}]
-                hits.append({"accession": entry.get("primaryAccession", ""),
-                             "gene": genes[0].get("geneName", {}).get("value", ""),
-                             "reviewed": str(entry.get("entryType", "")).startswith("UniProtKB reviewed")})
-            return hits, release, ""
+            return _search_page(query, opener, size=size, cursor=cursor)
         except (OSError, ValueError) as exc:
-            error = str(exc)
-            if isinstance(exc, urllib.error.HTTPError) and exc.code not in {429, 500, 502, 503, 504}:
-                break
-            if attempt < 2:
-                sleeper(2 ** attempt)
-    return [], "unknown", error
+            if isinstance(exc, urllib.error.HTTPError) and exc.code not in RETRYABLE_HTTP:
+                raise
+            if attempt == 2:
+                raise
+            sleeper(retry_delay(exc, attempt))
+
+
+def _query_with_retry(query, opener, sleeper, size=100, max_pages=20):
+    """Return (hits, release, error); pagination is followed so a multi-page
+    result can never be silently truncated into a false 'resolved' mapping."""
+    hits, release, cursor, pages = [], "unknown", None, 0
+    while True:
+        try:
+            data, headers, next_url = _fetch_page_with_retry(query, opener, sleeper, size, cursor)
+        except (OSError, ValueError) as exc:
+            return [], "unknown", str(exc)
+        release = headers.get("x-uniprot-release", headers.get("X-UniProt-Release", release))
+        for entry in data.get("results", []):
+            genes = entry.get("genes") or [{}]
+            hits.append({"accession": entry.get("primaryAccession", ""),
+                         "gene": genes[0].get("geneName", {}).get("value", ""),
+                         "reviewed": str(entry.get("entryType", "")).startswith("UniProtKB reviewed")})
+        pages += 1
+        match = re.search(r"[?&]cursor=([^&]+)", next_url or "")
+        if not match:
+            return hits, release, ""
+        if pages >= max_pages:
+            return [], "unknown", "pagination_cap_reached_incomplete_candidate_list"
+        cursor = match.group(1)
+        sleeper(0.2)
 
 
 def search_accessions(query, limit=None, offline=False, opener=None, sleeper=time.sleep):
@@ -180,7 +196,8 @@ def search_accessions(query, limit=None, offline=False, opener=None, sleeper=tim
     release, total = "unknown", None
     try:
         while True:
-            data, headers, next_url = _search_page(query, opener, size=min(500, limit or 500), cursor=cursor)
+            data, headers, next_url = _fetch_page_with_retry(query, opener, sleeper,
+                                                             size=min(500, limit or 500), cursor=cursor)
             release = headers.get("x-uniprot-release", headers.get("X-UniProt-Release", release))
             if total is None:
                 raw_total = headers.get("x-total-results", headers.get("X-Total-Results"))
@@ -217,7 +234,10 @@ def select_analysis_reference(protein, confirmation="not_performed"):
     Selecting the database canonical sequence for screening is not the
     laboratory's experimental isoform confirmation; that confirmation still
     gates downstream fusion assembly. Genuine identity ambiguity or version
-    conflicts are preserved by callers, not resolved here.
+    conflicts are preserved by callers, not resolved here. The annotated
+    isoform inventory is recorded for reconciliation; sequence-level comparison
+    against other isoforms stays explicitly not evaluated because the UniProt
+    entry document does not carry isoform sequences.
     """
     p = protein
     if p.get("isoform") and not p.get("isoform_ambiguous"):
@@ -229,8 +249,19 @@ def select_analysis_reference(protein, confirmation="not_performed"):
         rationale = ("Screening explicitly selected the database canonical sequence as the analysis reference. "
                      "This is not an experimental isoform confirmation; the laboratory isoform must still be "
                      "confirmed before any fusion assembly.")
+    ap = p.get("alternative_products")
+    if ap and ap.get("isoform_count", 0) > 1:
+        iso_note = (f"UniProt 注释 {ap['isoform_count']} 个 isoform；主条目不含各 isoform 完整序列，"
+                    "canonical 与其他 isoform 的序列/边界差异未评估")
+    elif ap:
+        iso_note = "UniProt 仅注释 canonical isoform（无其他已注释 isoform）"
+    else:
+        iso_note = "无 ALTERNATIVE PRODUCTS 注释（未注释可变 isoform，不证明不存在）"
     p["reference_selection"] = {"basis": basis, "selected_isoform": p["isoform"], "rationale": rationale,
                                 "experimental_isoform_confirmation": confirmation,
+                                "annotated_isoform_count": (ap or {}).get("isoform_count"),
+                                "isoform_comparison": "not_evaluated",
+                                "isoform_comparison_note": iso_note,
                                 "note": "Canonical/reference choice gates nothing in screening; experimental isoform confirmation gates fusion assembly."}
     return p
 

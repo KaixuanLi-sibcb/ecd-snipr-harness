@@ -8,14 +8,18 @@
 - `identity_status`: resolved / ambiguous / unresolved. Gene-name mapping keeps the recorded queries, the hit list and the mapping policy; ambiguity is preserved and never guessed away.
 - `fetch`: status, URL, retrieval time, source entry version and raw-response SHA256 for accession fetches.
 - `protein_file` / `protein_sha256`: normalized reference record, hash-verified on load.
-- `reference_selection`: basis (`database_canonical` or `explicit_isoform`), selected isoform, rationale and `experimental_isoform_confirmation`. Canonical selection is an analysis choice, not laboratory isoform confirmation.
+- `reference_selection`: basis (`database_canonical` or `explicit_isoform`), selected isoform, rationale and `experimental_isoform_confirmation`. Canonical selection is an analysis choice, not laboratory isoform confirmation. It also records `annotated_isoform_count` (from the UniProt ALTERNATIVE PRODUCTS comment; `null` when no such comment exists — not annotated does not prove absent), `isoform_comparison` (`not_evaluated`: the entry document does not carry isoform sequences) and an explanatory note.
 - `disposition`: membrane_set_membership, natural_cell_surface_target, scope_status with reason codes, extension_set (core / secreted_extension) and explicit notes for multi-pass, GPI, organelle and under-annotated entries.
 - `processing_status` / `processing_error`: a single-item failure is recorded and never halts the batch.
 - `duplicate_of`: duplicate inputs are linked to the first occurrence, not merged or dropped.
 
+Normalized protein records additionally carry `alternative_products` (annotated isoform inventory: count, names, isoform IDs, sequence status, events) and `isoform_differences` (UniProt alternative-sequence features with exact coordinates, description, feature ID and evidence). Both are provenance for reconciliation; neither participates in candidate generation.
+
 ## Screening record (v0.3.0)
 
-One record per analysis object in `screening.json` / `protein_screening.tsv`: entry/protein identity, reference selection, scope_status (+ reason codes), extension set, processing_status, screening_recommendation (one of the four classes or null for out-of-scope/technical failure), reason_codes, brief rationale, evidence (boundary/topology/reference/interval), missing_info, not_evaluated, candidates_evaluated, primary_candidate_id, alternates with `reason_not_primary`, deferred_annotations, lab_rules application, and functional_status (always `not_experimentally_validated`).
+One record per analysis object in `screening.json` / `protein_screening.tsv`: entry/protein identity, reference selection, scope_status (+ reason codes), extension set, processing_status, screening_recommendation (one of the four classes or null for out-of-scope/technical failure), reason_codes, brief rationale, evidence (boundary/topology/reference/interval), missing_info, not_evaluated, candidates_evaluated, primary_candidate_id, alternates with `reason_not_primary`, deferred_annotations, lab_rules application, and functional_status (always `not_experimentally_validated`). Annotated isoform differences overlapping the primary candidate interval appear under `evidence.isoform_differences_within_candidate` as a record only (never a class change).
+
+`summary.json` counts never mix units: `genes_unique` and `references_unique` cover resolved records only (a normalized, isoform-bearing reference went through screening); unresolved/ambiguous, duplicate and technically failed rows are counted in their own fields. `completeness` is `partial` when acquisition was incomplete or any screening-stage technical failure occurred; a partial run is never reported as full.
 
 Lab rules file: a JSON object with a `rules` list. Each rule needs `rule_id`, a non-empty `match` on gene/accession/topology, `effect` in `annotate` / `downgrade_to_conditional` / `downgrade_to_no_standard_route`, `rationale`, and sourced `evidence` (kind local_experiment or curated_annotation, source, version). Rules annotate or downgrade only.
 

@@ -64,8 +64,14 @@ def _rows_for_screening(records, entries, candidates):
     return rows
 
 
-def build_summary(definition, records, candidates, version, engine_sha256, pilot):
-    """Counts never mix units: genes, references/isoforms and candidates are separate."""
+def build_summary(definition, records, candidates, version, engine_sha256, pilot, completeness_override=None):
+    """Counts never mix units: genes, references/isoforms and candidates are separate.
+
+    Gene and reference counts cover resolved records only (a normalized,
+    isoform-bearing protein went through screening); unresolved, ambiguous,
+    duplicate and technically failed rows are counted in their own fields and
+    never inflate the gene/reference totals.
+    """
     evaluated = [r for r in records if r.get("screening_recommendation") in CLASSES]
     in_scope = [r for r in evaluated if r.get("scope_status") == "in_scope"]
     core = [r for r in in_scope if r.get("extension_set") == "core"]
@@ -76,8 +82,10 @@ def build_summary(definition, records, candidates, version, engine_sha256, pilot
     unresolved = [r for r in records if r.get("screening_recommendation") == "insufficient_evidence"
                   and any(c in {"identity_unresolved", "identity_ambiguous"} for c in r.get("reason_codes", []))]
     duplicates = [r for r in records if r.get("duplicate_of")]
-    genes = {r["gene"] for r in records if r.get("gene")}
-    references = {(r["accession"], r["isoform"]) for r in records if r.get("accession") and r.get("duplicate_of") is None and r["accession"]}
+    resolved_records = [r for r in records if r.get("isoform")]
+    genes = {r["gene"] for r in resolved_records if r.get("gene")}
+    references = {(r["accession"], r["isoform"]) for r in resolved_records
+                  if r.get("accession") and not r.get("duplicate_of")}
     denom = len(in_scope)
 
     def ratio(n, d, definition_text):
@@ -92,8 +100,8 @@ def build_summary(definition, records, candidates, version, engine_sha256, pilot
                 "release": definition["database"]["release"], "query": definition.get("query"),
                 "inclusion_rules": definition.get("inclusion_rules", []),
                 "created_at": definition.get("created_at")},
-        "completeness": {"state": definition.get("completeness", "partial"),
-                         "note": "partial 表示重跑可能增加数据（获取失败/截断）；绝不是全量完成"},
+        "completeness": {"state": completeness_override or definition.get("completeness", "partial"),
+                         "note": "partial 表示重跑可能增加数据（获取失败/截断/处理失败）；绝不是全量完成"},
         "counts": {
             "input_rows": definition["counts"]["input_rows"],
             "duplicate_input_rows": len(duplicates),
@@ -293,9 +301,11 @@ def figure_source_data(summary):
     }
 
 
-def export_screening_outputs(run_dir, definition, records, candidates, version, engine_sha256, pilot):
+def export_screening_outputs(run_dir, definition, records, candidates, version, engine_sha256, pilot,
+                             completeness_override=None):
     run_dir = Path(run_dir)
-    summary = build_summary(definition, records, candidates, version, engine_sha256, pilot)
+    summary = build_summary(definition, records, candidates, version, engine_sha256, pilot,
+                            completeness_override=completeness_override)
     write_json(run_dir / "screening.json", records)
     write_json(run_dir / "candidates.json", candidates)
     write_json(run_dir / "summary.json", summary)

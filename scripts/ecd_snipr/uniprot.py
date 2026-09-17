@@ -10,6 +10,21 @@ from pathlib import Path
 from .common import digest, file_hash, now, read_json, write_json
 from . import __version__
 
+RETRYABLE_HTTP = {429, 500, 502, 503, 504}
+MAX_RETRY_AFTER = 60  # never sleep longer than this on a single Retry-After hint
+
+
+def retry_delay(exc, attempt):
+    """Backoff seconds for a transient failure; honors a bounded Retry-After."""
+    if isinstance(exc, urllib.error.HTTPError) and exc.code in RETRYABLE_HTTP:
+        try:
+            hinted = (exc.headers or {}).get("Retry-After")
+            if hinted is not None and str(hinted).strip().isdigit():
+                return min(int(str(hinted).strip()), MAX_RETRY_AFTER)
+        except (AttributeError, TypeError):
+            pass
+    return 2 ** attempt
+
 
 def normalize(raw):
     accession = raw["primaryAccession"]
@@ -24,6 +39,28 @@ def normalize(raw):
          "taxon_id": raw.get("organism", {}).get("taxonId"), "sequence": seq,
          "evidence": source, "features": [], "topology": "unknown", "location": "unknown",
          "notes": ["Canonical fetch does not establish the intended experimental isoform."]}
+    # Isoform inventory (recording only, never a screening gate): the main entry
+    # document lists annotated isoforms and textual difference features but does
+    # NOT carry isoform sequences, so canonical-vs-isoform comparison stays
+    # explicitly not evaluated unless the isoform itself was the fetched accession.
+    isoforms = []
+    events = set()
+    for comment in raw.get("comments", []):
+        if comment.get("commentType") == "ALTERNATIVE PRODUCTS":
+            events.update(comment.get("events", []))
+            for iso in comment.get("isoforms", []):
+                name = iso.get("name") or {}
+                isoforms.append({"name": name.get("value", "") if isinstance(name, dict) else str(name),
+                                 "isoform_ids": iso.get("isoformIds", []),
+                                 "sequence_status": iso.get("isoformSequenceStatus", "")})
+    p["alternative_products"] = ({"isoform_count": len(isoforms), "isoforms": isoforms,
+                                  "events": sorted(events)} if isoforms else None)
+    p["isoform_differences"] = [
+        {"start": (f.get("location", {}).get("start") or {}).get("value"),
+         "end": (f.get("location", {}).get("end") or {}).get("value"),
+         "description": f.get("description", ""), "feature_id": f.get("featureId", ""),
+         "evidence": dict(source, eco=f.get("evidences", []))}
+        for f in raw.get("features", []) if f.get("type") == "Alternative sequence"]
     locations = []
     for comment in raw.get("comments", []):
         if comment.get("commentType") == "SUBCELLULAR LOCATION":
@@ -114,8 +151,8 @@ def fetch(accession, cache, offline=False, refresh=False, opener=None, sleeper=t
             return dict(meta, cache_path=str(raw_path))
         except (OSError, ValueError) as exc:
             error = str(exc)
-            if isinstance(exc, urllib.error.HTTPError) and exc.code not in {429, 500, 502, 503, 504}:
+            if isinstance(exc, urllib.error.HTTPError) and exc.code not in RETRYABLE_HTTP:
                 break
             if attempt < 2:
-                sleeper(2 ** attempt)
+                sleeper(retry_delay(exc, attempt))
     return {"status": "error", "accession": accession, "url": url, "retrieved_at": now(), "reason": error}

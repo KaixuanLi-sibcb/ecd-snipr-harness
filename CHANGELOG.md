@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.1 - 2026-09-16
+
+Polish round over 0.3.0 (audit-driven; no workflow redesign). CLI flags, the decision table and the candidate engine are unchanged; the 12-entry public pilot still classifies 4 standard / 7 conditional / 1 no_standard_route.
+
+- Fix summary accounting: `references_unique` and `genes_unique` in `summary.json` now count resolved records only; unresolved/ambiguous/failed input rows no longer inflate gene/reference totals (their own counters are unchanged).
+- Fix gene-name mapping completeness: `map_gene_name` now follows UniProt search pagination, so a gene whose exact matches span multiple pages can no longer be falsely "resolved" from a truncated first page; exceeding the page cap is an honest error, never silent truncation.
+- Robustness: per-page bounded retry for the accession-listing query (a transient mid-pagination error no longer aborts set building), and 429/5xx retries honor a bounded `Retry-After` hint (≤60 s) before exponential fallback.
+- Fix screening isolation: a corrupted or unreadable cached protein record is now that entry's `technical_failure` instead of aborting the whole run; screening-stage failures mark the run `partial` even when acquisition was complete. Protein records are loaded and hash-verified per entry, so peak memory no longer scales with set size.
+- Isoform recording: normalized references carry `alternative_products` (annotated isoform inventory) and `isoform_differences` (alternative-sequence features). `reference_selection` records `annotated_isoform_count` and `isoform_comparison: not_evaluated` — the UniProt entry document does not contain isoform sequences, so canonical-vs-isoform comparison is explicitly not evaluated rather than silently assumed. Annotated isoform differences overlapping a candidate interval are surfaced under `evidence.isoform_differences_within_candidate` and `missing_info` as a record only — they never downgrade, block, or reclassify (the LAG3 deferral policy is preserved).
+- tests/test_polish.py adds 10 regression tests (134 total). Offline re-run of the 12-entry public pilot from the existing cache reproduces the validated class distribution with the enriched records.
+
 ## 0.3.0 - 2026-09-16
 
 - Lab-workbook cross-check fix (same version, regression test added): UniProt entries annotated "Secreted" plus a generic organelle membrane location (e.g. REN "Secreted"+"Membrane", TFPI "Secreted"+"Microsome membrane") were misclassified as other_membrane and ruled out_of_scope. `normalize` now gives Secreted precedence over generic membrane; plasma membrane still wins over both; raw_locations are preserved. Found via validation_v031 three-way comparison, not tuned to force agreement. 124 tests green.

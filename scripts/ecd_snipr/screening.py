@@ -14,7 +14,7 @@ import time
 from collections import Counter
 from pathlib import Path
 from . import __version__
-from .acquisition import disposition, load_set_proteins
+from .acquisition import disposition
 from .common import digest, file_hash, now, read_json, tsv, write_json, canonical
 from .design import propose
 from .harness import CANDIDATE_COLUMNS, engine_hash, verify_bundle
@@ -23,6 +23,10 @@ CLASSES = ("standard_candidate", "conditional_candidate", "no_standard_route", "
 
 # Issues that make a supported candidate conditional rather than standard:
 # a specific, named design question that needs special design or verification.
+# Note: secreted_location_unconfirmed is currently raised at block severity by
+# the engine (a topology/location conflict blocks every candidate), so in
+# practice it surfaces under no_standard_route, not here; it stays listed so a
+# future review-severity change lands in the intended class.
 CONDITIONAL_CODES = {
     "type_ii_attachment_orientation_change",
     "gpi_anchor_replaced",
@@ -255,6 +259,22 @@ def recommend(protein, candidates, base_flags, entry=None, lab_rules=None):
         missing.append("无已映射表位：表位保留未评估（完整 ECD 不等于识别保留已被证明）")
     if record["experimental_isoform_confirmation"] != "performed":
         missing.append("实验室实际 isoform 未实验确认；公共 canonical 仅作分析参考，融合装配前必须确认")
+    iso_count = (protein.get("reference_selection") or {}).get("annotated_isoform_count")
+    if iso_count and iso_count > 1:
+        missing.append(f"UniProt 注释 {iso_count} 个 isoform；canonical 与实验 isoform 的序列/边界差异未评估"
+                       "（主条目不含 isoform 完整序列）")
+    # Annotated isoform sequence differences overlapping the candidate interval
+    # are recorded as evidence. They never downgrade or block here: a textual
+    # difference feature is not the experimental isoform, and the validated
+    # policy (e.g. the LAG3 shed-form deferral) is record-and-confirm, not
+    # auto-conditional. Comparison requires the actual isoform sequence.
+    diffs = [d for d in protein.get("isoform_differences", [])
+             if type(d.get("start")) is int and type(d.get("end")) is int
+             and d["start"] <= primary["end"] and primary["start"] <= d["end"]]
+    if diffs:
+        record["evidence"]["isoform_differences_within_candidate"] = diffs
+        missing.append("已注释的可变序列差异落在候选区间内（见 evidence.isoform_differences_within_candidate）；"
+                       "仅作记录，不改变初筛类别；装配前随实验 isoform 一并确认")
     if protein.get("location") != "plasma_membrane" and topology != "secreted":
         missing.append("质膜定位注释未确认")
     record["missing_info"] = missing
@@ -282,10 +302,25 @@ def recommend(protein, candidates, base_flags, entry=None, lab_rules=None):
 
 
 def run_screening(set_dir, outdir, lab_rules_path=None, domain_policy="auto", pilot=False, resume=False):
-    """Batch screening bundle: per-item isolation, resume, partial marking."""
+    """Batch screening bundle: per-item isolation, resume, partial marking.
+
+    Protein records are loaded and hash-verified one entry at a time: a
+    corrupted or unreadable record is that entry's technical failure, never a
+    whole-run abort, and peak memory does not scale with set size.
+    """
     if domain_policy not in {"auto", "full_ecd_only", "full_ecd_and_domains"}:
         raise ValueError("Unknown domain policy")
-    definition, proteins = load_set_proteins(set_dir)
+    set_path = Path(set_dir)
+    definition = read_json(set_path / "set_definition.json")
+
+    def load_protein(entry):
+        if not entry.get("protein_file"):
+            return None
+        path = set_path / entry["protein_file"]
+        if file_hash(path) != entry["protein_sha256"]:
+            raise ValueError("Cached protein record checksum mismatch: " + entry["protein_file"])
+        return read_json(path)
+
     lab_rules = load_lab_rules(lab_rules_path) if lab_rules_path else None
     options = {"domain_policy": domain_policy, "pilot": bool(pilot),
                "lab_rules_sha256": file_hash(lab_rules_path) if lab_rules_path else None}
@@ -325,7 +360,7 @@ def run_screening(set_dir, outdir, lab_rules_path=None, domain_policy="auto", pi
         records, all_candidates = [], []
         for entry in definition["entries"]:
             try:
-                record, candidates = _screen_entry(entry, proteins, lab_rules, domain_policy)
+                record, candidates = _screen_entry(entry, load_protein(entry), lab_rules, domain_policy)
             except Exception as exc:  # per-item isolation
                 record = {"entry_id": entry["entry_id"], "protein_id": entry.get("accession", ""),
                           "gene": entry.get("gene", ""), "accession": entry.get("accession", ""),
@@ -350,11 +385,16 @@ def run_screening(set_dir, outdir, lab_rules_path=None, domain_policy="auto", pi
             rec = primary_by_protein.get(c.get("protein_id"))
             c["screening_recommendation"] = rec["screening_recommendation"] if rec else None
             c["is_primary"] = bool(rec and c["candidate_id"] == rec["primary_candidate_id"])
-            protein = proteins.get(rec["entry_id"]) if rec else None
-            c["junction_notes"] = junction_notes(c, protein or {})
+            c["junction_notes"] = junction_notes(c, {"topology": c.get("topology", "unknown")})
         from .reporting import export_screening_outputs
+        defined_failures = definition.get("counts", {}).get("technical_failures", 0)
+        screen_failures = sum(1 for r in records if r.get("processing_status") == "technical_failure")
+        # A screen-stage failure (e.g. corrupted cached record) makes the run
+        # partial even when acquisition itself was complete.
+        completeness_override = "partial" if screen_failures > defined_failures else None
         summary = export_screening_outputs(run_dir, definition, records, all_candidates,
-                                           version=__version__, engine_sha256=code_hash, pilot=pilot)
+                                           version=__version__, engine_sha256=code_hash, pilot=pilot,
+                                           completeness_override=completeness_override)
         event("export", "complete")
         state["state"] = "complete"
         state["set_completeness"] = summary["completeness"]["state"]
@@ -406,7 +446,7 @@ def partition_features(protein):
     return engine_input, deferred
 
 
-def _screen_entry(entry, proteins, lab_rules, domain_policy):
+def _screen_entry(entry, protein, lab_rules, domain_policy):
     """Screen one set entry; duplicates reference the first occurrence."""
     if entry.get("duplicate_of"):
         return {"entry_id": entry["entry_id"], "protein_id": entry.get("accession", ""),
@@ -422,7 +462,6 @@ def _screen_entry(entry, proteins, lab_rules, domain_policy):
                 "primary_candidate_id": "", "alternates": [], "duplicate_of": entry["duplicate_of"],
                 "lab_rules": {"status": "尚未纳入" if not lab_rules else "not_applied"},
                 "functional_status": "not_experimentally_validated"}, []
-    protein = proteins.get(entry["entry_id"])
     if protein is None:
         status = "technical_failure" if entry.get("processing_status") == "failed" else "ok"
         reason = "identity_ambiguous" if entry.get("identity_status") == "ambiguous" else \
