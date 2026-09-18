@@ -5,7 +5,7 @@
 [![CI](https://github.com/KaixuanLi-sibcb/ecd-snipr-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/KaixuanLi-sibcb/ecd-snipr-harness/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python ≥ 3.10](https://img.shields.io/badge/python-≥3.10-blue.svg)](pyproject.toml)
-[![Version 0.3.1](https://img.shields.io/badge/version-0.3.1-208B83.svg)](CHANGELOG.md)
+[![Version 0.3.1](https://img.shields.io/badge/version-0.4.0-208B83.svg)](CHANGELOG.md)
 
 `ecd-snipr-harness` turns *"a new membrane target arrived — which fragment should we use, and why?"* into a batch-executable, fully traceable pipeline. Every target gets a concrete candidate fragment (coordinates · sequence · rationale · open issues), a four-class screening recommendation, and a reconciled coverage summary across the whole set.
 
@@ -30,7 +30,7 @@ Each reference is classified by a transparent decision table — no composite sc
 | Recommendation | Meaning |
 |---|---|
 | **standard_candidate** | A routine candidate with positive sequence/topology/boundary evidence |
-| **conditional_candidate** | A sourced candidate exists, but specific issues (orientation, processing, domain choice, …) need verification |
+| **conditional_candidate** | A sourced candidate exists, but specific issues (orientation, processing, domain cut, multichain partner, boundary conflict, …) need verification |
 | **no_standard_route** | No routine design under current routes — a route limitation, not a verdict on the protein |
 | **insufficient_evidence** | Core identity/topology/boundary evidence is missing — an evidence state, not a failure |
 
@@ -89,7 +89,7 @@ Incomplete retrievals are marked `partial` and never reported as complete; `--re
 ## Development
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'   # 134 checks
+python3 -m unittest discover -s tests -p 'test_*.py'   # 159 checks
 python3 scripts/manage_skill.py validate               # contract + privacy audit
 python3 scripts/manage_skill.py privacy-check
 ```

@@ -15,9 +15,10 @@ from collections import Counter
 from pathlib import Path
 from . import __version__
 from .acquisition import disposition
-from .common import digest, file_hash, now, read_json, tsv, write_json, canonical
+from .common import digest, file_hash, now, read_json, sequence, tsv, write_json, canonical
 from .design import propose
 from .harness import CANDIDATE_COLUMNS, engine_hash, verify_bundle
+from .profile import enumerate_external_loops
 
 CLASSES = ("standard_candidate", "conditional_candidate", "no_standard_route", "insufficient_evidence")
 
@@ -38,7 +39,16 @@ CONDITIONAL_CODES = {
     "domain_fragment_independence_unproven",
     "prediction_requires_annotation_review",
     "plasma_membrane_not_confirmed",
+    "multichain_partner_required",   # SUBUNIT records explicit hetero-oligomer assembly
+    "boundary_feature_conflict",     # candidate boundary disagrees with adjacent annotation
 }
+
+# The engine raises the review-level risk `domain_cut` with the domain identity;
+# screening surfaces it as the conditional reason `domain_cut_by_boundary`.
+RISK_TO_CONDITIONAL_REASON = {"domain_cut": "domain_cut_by_boundary"}
+
+# Informational reason codes: recorded for transparency, never change the class.
+INFORMATIONAL_REASON_CODES = {"tm_adjacency_tolerance_used", "boundary_adjacency_tolerance_used"}
 
 # Core information missing or internally conflicting: screening cannot give a
 # reliable recommendation. This is an evidence state, not a biological failure.
@@ -74,9 +84,10 @@ SCREENING_COLUMNS = [
     "entry_id", "protein_id", "gene", "accession", "isoform", "reference_basis",
     "experimental_isoform_confirmation", "input_row", "input_value", "duplicate_of",
     "membrane_set_membership", "natural_cell_surface_target", "scope_status", "scope_reason_codes",
-    "extension_set", "topology", "location", "screening_recommendation",
+    "extension_set", "topology", "location", "reviewed", "annotation_score", "screening_recommendation",
     "primary_candidate_id", "primary_antigen_form", "primary_start", "primary_end", "primary_length",
     "reason_codes", "rationale", "main_risks", "missing_info", "not_evaluated", "deferred_annotations",
+    "primary_molecular_profile", "primary_boundary_analysis", "multichain_partners", "multipass_loops",
     "lab_rules_status", "processing_status", "processing_error",
 ]
 
@@ -187,6 +198,7 @@ def recommend(protein, candidates, base_flags, entry=None, lab_rules=None):
         "entry_id": entry.get("entry_id", ""), "protein_id": protein.get("protein_id", ""),
         "gene": protein.get("gene", ""), "accession": protein.get("accession", ""),
         "isoform": protein.get("isoform", ""),
+        "reviewed": protein.get("reviewed"), "annotation_score": protein.get("annotation_score"),
         "reference_selection": protein.get("reference_selection"),
         "experimental_isoform_confirmation": (protein.get("reference_selection") or {}).get("experimental_isoform_confirmation", "not_performed"),
         "topology": topology, "location": protein.get("location", "unknown"),
@@ -227,28 +239,48 @@ def recommend(protein, candidates, base_flags, entry=None, lab_rules=None):
         return record
     codes = sorted({r["code"] for r in primary.get("risks", [])})
     conditional = sorted(set(codes) & CONDITIONAL_CODES)
+    for risk_code, reason_code in RISK_TO_CONDITIONAL_REASON.items():
+        if risk_code in codes and reason_code not in conditional:
+            conditional.append(reason_code)
+    conditional.sort()
     if "prediction_requires_annotation_review" in conditional and protein.get("evidence", {}).get("kind") == "curated_annotation":
         # Reviewed entry: prediction-evidence boundaries remain a review-level
         # risk but do not downgrade the class. Unreviewed entries stay conditional.
         conditional.remove("prediction_requires_annotation_review")
+    info_codes = sorted(set(codes) & INFORMATIONAL_REASON_CODES)
     cls = "conditional_candidate" if conditional else "standard_candidate"
     record.update(screening_recommendation=cls, primary_candidate_id=primary["candidate_id"], alternates=alternates)
     record["evidence"] = {
         "boundary_evidence": primary.get("boundary_evidence", {}),
+        "boundary_analysis": primary.get("boundary_analysis"),
+        "molecular_profile": primary.get("molecular_profile"),
+        "multichain_partners": primary.get("multichain_partners", []),
         "topology_basis": {"topology": topology, "location": protein.get("location", "unknown")},
         "reference": {"accession": protein.get("accession"), "isoform": protein.get("isoform"),
-                      "evidence": protein.get("evidence", {}), "selection": protein.get("reference_selection")},
+                      "evidence": protein.get("evidence", {}), "selection": protein.get("reference_selection"),
+                      "reviewed": protein.get("reviewed"), "annotation_score": protein.get("annotation_score")},
         "sequence_sha256": primary.get("reference_sha256", ""),
         "antigen_form_type": primary.get("antigen_form_type"),
         "interval": {"start": primary.get("start"), "end": primary.get("end"), "coordinate_system": "1-based-inclusive"},
         "length": primary.get("length"),
     }
-    record["reason_codes"] = conditional if conditional else ["positive_sequence_topology_boundary_evidence"]
+    record["reason_codes"] = (conditional if conditional else ["positive_sequence_topology_boundary_evidence"]) + \
+        [c for c in info_codes if c not in conditional]
     if cls == "standard_candidate":
         record["rationale"] = ("有明确参考序列、适用的拓扑与区间依据，能够提出常规候选；"
                                "这证明候选在计算上成立，不证明表达或激活成功")
     else:
         record["rationale"] = "有具体、有来源的候选，但存在需要特殊设计或重点核验的明确问题：" + ", ".join(conditional)
+    if "domain_cut_by_boundary" in conditional:
+        cut_detail = (primary.get("molecular_profile") or {}).get("domains_cut", [])
+        record["rationale"] += "；候选边界切割已注释结构域：" + ", ".join(
+            f"{d['name']}({d['start']}-{d['end']}, {d.get('cut_side', '')})" for d in cut_detail)
+    if "multichain_partner_required" in conditional and primary.get("multichain_partners"):
+        record["rationale"] += "；SUBUNIT 注释的异源多聚体搭档证据：" + " | ".join(primary["multichain_partners"])
+    if "boundary_feature_conflict" in conditional:
+        ba = primary.get("boundary_analysis") or {}
+        sides = [s for s in ("n_side", "c_side") if (ba.get(s) or {}).get("reason_code") == "boundary_feature_conflict"]
+        record["rationale"] += "；候选边界与相邻注释不一致（" + ", ".join(sides) + "），需核验边界选择"
     # Missing literature/risk records are reported, never converted into failure.
     missing = []
     criteria = {r["kind"]: r for r in primary.get("criteria_review", [])}
@@ -497,6 +529,25 @@ def _screen_entry(entry, protein, lab_rules, domain_policy):
             pass  # invalid sequence: the engine's blocking check handles it
     candidates, base_flags = propose(p, None)
     record = recommend(p, candidates, base_flags, entry=entry, lab_rules=lab_rules)
+    if p.get("topology") == "multi_pass" and p.get("sequence"):
+        # Multi-pass depth: enumerate every annotated extracellular loop with its
+        # length and fully contained sourced domains; a loop containing a sourced
+        # domain is eligible as a conditional alternate. Recorded explicitly even
+        # when no alternate exists; loops are never stitched.
+        loops = enumerate_external_loops(p, p["features"], len(sequence(p["sequence"])))
+        for loop in loops:
+            loop["alternate_candidate_ids"] = [
+                c["candidate_id"] for c in candidates
+                if c.get("origin") == "domain_alternative"
+                and any(c.get("start") == d["start"] and c.get("end") == d["end"]
+                        for d in loop.get("domains_fully_contained", []))]
+        record["multipass_loops"] = loops
+        if loops and not any(l["eligible_domain_alternate"] for l in loops):
+            record.setdefault("missing_info", [])
+            note = ("逐胞外环枚举：没有任何环完整包含有来源的结构域，因此没有条件性备选；"
+                    "不拼接胞外环")
+            if note not in record["missing_info"]:
+                record["missing_info"].append(note)
     if deferred:
         record["deferred_annotations"] = deferred
         record.setdefault("reason_codes", [])

@@ -33,6 +33,22 @@ def _rows_for_screening(records, entries, candidates):
         disp = entry.get("disposition") or {}
         p = primary.get(r.get("primary_candidate_id") or "", {})
         risks = sorted({x["code"] for x in p.get("risks", [])}) if p else []
+        # Compact per-candidate profile for the TSV; full detail stays in
+        # candidates.json / screening.json evidence.
+        mp = p.get("molecular_profile") or {}
+        mp_brief = {k: mp.get(k) for k in ("length", "cysteine_count", "cysteine_odd")} | {
+            "n_glyco_sequons": (mp.get("n_glyco_sequons") or {}).get("count"),
+            "annotated_glycosylation": len(mp.get("annotated_glycosylation_in_fragment") or []),
+            "disulfides_fully_contained": len(mp.get("disulfides_fully_contained") or []),
+            "disulfides_partial": len(mp.get("disulfides_partial") or []),
+            "domains_fully_contained": [d["name"] for d in mp.get("domains_fully_contained", [])],
+            "domains_cut": mp.get("domains_cut", []),
+            "variants_overlapping": len(mp.get("variants_overlapping") or []),
+            "mutagenesis_records_overlapping": len(mp.get("mutagenesis_records_overlapping") or []),
+        } if mp else {}
+        ba = p.get("boundary_analysis") or {}
+        ba_brief = {"defining_feature": ba.get("defining_feature"),
+                    "n_side": ba.get("n_side"), "c_side": ba.get("c_side")} if ba else {}
         rows.append({
             "entry_id": r["entry_id"], "protein_id": r.get("protein_id", ""),
             "gene": r.get("gene", ""), "accession": r.get("accession", ""), "isoform": r.get("isoform", ""),
@@ -46,6 +62,7 @@ def _rows_for_screening(records, entries, candidates):
             "scope_status": r.get("scope_status", ""), "scope_reason_codes": ",".join(r.get("scope_reason_codes", [])),
             "extension_set": r.get("extension_set", ""),
             "topology": r.get("topology", ""), "location": r.get("location", ""),
+            "reviewed": r.get("reviewed", ""), "annotation_score": r.get("annotation_score", ""),
             "screening_recommendation": r.get("screening_recommendation") or "",
             "primary_candidate_id": r.get("primary_candidate_id", ""),
             "primary_antigen_form": p.get("antigen_form_type", ""),
@@ -57,6 +74,10 @@ def _rows_for_screening(records, entries, candidates):
             "not_evaluated": " | ".join(r.get("not_evaluated", [])),
             "deferred_annotations": ";".join(f"{d['kind']}:{d.get('name') or ''}[{d.get('start')}-{d.get('end')}]"
                                              for d in r.get("deferred_annotations", [])),
+            "primary_molecular_profile": mp_brief,
+            "primary_boundary_analysis": ba_brief,
+            "multichain_partners": p.get("multichain_partners", []),
+            "multipass_loops": r.get("multipass_loops", ""),
             "lab_rules_status": (r.get("lab_rules") or {}).get("status", ""),
             "processing_status": r.get("processing_status", ""),
             "processing_error": r.get("processing_error", ""),
@@ -144,7 +165,70 @@ def build_summary(definition, records, candidates, version, engine_sha256, pilot
         if t not in summary["topology_by_class"]:
             summary["topology_by_class"][t] = {k: 0 for k in CLASSES}
         summary["topology_by_class"][t][r["screening_recommendation"]] += 1
+    # Reason-code tallies: per-code counts within each class; a record can carry
+    # several codes, so tallies do not sum to class counts (stated explicitly).
+    conditional_records = [r for r in in_scope if r["screening_recommendation"] == "conditional_candidate"]
+    no_route_records = [r for r in in_scope if r["screening_recommendation"] == "no_standard_route"]
+    primary_ids = {r["primary_candidate_id"] for r in in_scope if r.get("primary_candidate_id")}
+    warning_counter = Counter()
+    for c in candidates:
+        if c.get("is_primary") and c.get("candidate_id") in primary_ids:
+            warning_counter.update(x["code"] for x in c.get("risks", []) if x.get("severity") == "review")
+    summary["reason_code_tallies"] = {
+        "conditional_candidate": {
+            "counts": dict(Counter(c for r in conditional_records for c in r.get("reason_codes", []))),
+            "denominator": len(conditional_records),
+            "denominator_definition": "条件性候选参考数；一个参考可有多个理由码， tally 之和不要求等于分母"},
+        "no_standard_route": {
+            "counts": dict(Counter(c for r in no_route_records for c in r.get("reason_codes", []))),
+            "denominator": len(no_route_records),
+            "denominator_definition": "无常规路线参考数；一个参考可有多个理由码"},
+        "primary_candidate_review_warnings": {
+            "counts": dict(warning_counter),
+            "denominator": len(primary_ids),
+            "denominator_definition": "有主要候选的参考数；warning 为审阅级提醒，不影响类别"},
+    }
     return summary
+
+
+def checks_applied_section(records):
+    """What the deterministic screen evaluated vs did not evaluate (v0.4.0).
+
+    Static registry of the checks the code actually performs, plus dynamic
+    status where it depends on the run (lab rules, contextual records)."""
+    evaluated = [
+        "序列有效性、坐标精确性（1-based inclusive 在参考序列内）",
+        "原生 SP/TM/胞内尾/propeptide/GPI 信号残留（阻断级）",
+        "拓扑方向一致性（I 型/II 型/多跨膜/分泌冲突检测）",
+        "成熟链边界（分泌链、GPI ω 残基与成熟边界）",
+        "候选边界精度：逐边界列出定义性注释，并与相邻 SIGNAL/TM/PROPEP 注释核对（一致/容差间隙/冲突均显式记录）",
+        "结构域：完整保留 / 被候选边界切割（含结构域身份与切割侧）/ 域外省略",
+        "二硫键完整包含或部分保留（跨边界的断键）",
+        "半胱氨酸计数与奇偶性（潜在游离巯基，审阅级提醒）",
+        "N-糖基化 sequon 扫描（N-X-S/T, X≠P）与已注释 CARBOHYD 位点重叠核对；密度启发式仅作审阅提醒",
+        "已知活性位点/结合位点/SITE/LIPIDATION 在候选内外的分布（记录）",
+        "自然变异与诱变记录与候选区间的重叠（记录，不影响类别）",
+        "SUBUNIT 注释的异源多聚体关键词扫描（hetero-di/tri/tetra/oligo/multimer，命中句式逐字记录）",
+        "多跨膜胞外环逐环枚举（长度、完整包含的结构域、是否可作条件性备选；不拼接）",
+        "isoform 清单与落在候选区间内的可变序列差异（记录，不降级）",
+        "UniProt reviewed 状态与 annotation score（记录）",
+    ]
+    not_evaluated = [
+        "表位文献深挖与构象表位保留（无已映射表位不等于无表位）",
+        "六类上下文风险文献逐条核读（除非项目提供了 considerations 记录）",
+        "canonical 与其他 isoform 的序列级比较（UniProt 主条目不含 isoform 序列）",
+        "糖链实际占有率与糖型（sequon/注释位点不等于已占用）",
+        "结构/折叠预测、聚集预测、蛋白酶切割预测（未引入 GPU/AlphaFold/ESM/付费 API）",
+        "SNIPR 四类实验终点（表达、识别、背景、诱导）：全部未测定",
+        "实验室实际 isoform 确认（装配前必须另行确认）",
+    ]
+    lab = {((r.get("lab_rules") or {}).get("status")) for r in records}
+    lines = ["", "## 本轮应用的检查（checks applied）", "", "**已评估（确定性、逐候选）**："]
+    lines += [f"- {item}" for item in evaluated]
+    lines += ["", "**未评估（明确保留，不假装已覆盖）**："]
+    lines += [f"- {item}" for item in not_evaluated]
+    lines += [f"- 实验室经验规则：{('、'.join(sorted(lab))) if lab else '尚未纳入'}（规则只能下调建议）", ""]
+    return lines
 
 
 def pi_summary(summary, records):
@@ -206,7 +290,9 @@ def pi_summary(summary, records):
         f"- 核心资料不足 insufficient_evidence：{c['screening_classes_in_scope'].get('insufficient_evidence', 0)} 个"
         f"（另 {c['identity_unresolved_or_ambiguous']} 个身份未解析/歧义，输入行保留）。",
         "- 缺失的是身份/拓扑/边界证据，不是生物学失败结论。",
-        "",
+    ]
+    lines += checks_applied_section(records)
+    lines += [
         "## 尚未实验验证的内容", "",
         "- 所有候选：表达、识别保留、背景激活、诱导响应四类终点均未测定（functional_status=not_experimentally_validated）。",
         "- 实验室实际 isoform 未确认；真实 SNIPR 骨架未提供，本轮不生成任何融合序列，仅交付候选片段 FASTA 与接入说明。",

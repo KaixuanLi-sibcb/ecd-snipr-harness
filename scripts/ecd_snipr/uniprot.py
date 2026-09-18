@@ -26,17 +26,37 @@ def retry_delay(exc, attempt):
     return 2 ** attempt
 
 
+# UniProt feature types mapped into the normalized record. Every entry keeps
+# positions, the raw description, exact/fuzzy boundary status and evidence
+# (curated vs prediction by ECO code). Candidate-defining kinds are interpreted
+# by the engine; informational kinds (region/motif/sites/variants/...) are
+# parsed for the molecular profile and never silently dropped.
+FEATURE_KINDS = {"Signal": "signal_peptide", "Transmembrane": "transmembrane", "Domain": "domain",
+                 "Disulfide bond": "disulfide", "Chain": "chain", "Peptide": "processed_peptide",
+                 "Propeptide": "propeptide", "Region": "region", "Motif": "motif",
+                 "Glycosylation": "glycosylation_site", "Site": "site", "Binding site": "binding_site",
+                 "Active site": "active_site", "Natural variant": "variant", "Mutagenesis": "mutagenesis",
+                 "Lipidation": "lipidation"}
+
+# Comment types whose text is machine-readable enough to record verbatim.
+# SUBUNIT feeds the deterministic hetero-oligomer scan; FUNCTION/PTM are
+# recorded for review only (no automated interpretation).
+COMMENT_TEXT_TYPES = {"SUBUNIT": "subunit_comments", "FUNCTION": "function_comments", "PTM": "ptm_comments"}
+
+
 def normalize(raw):
     accession = raw["primaryAccession"]
     seq = raw["sequence"]["value"]
     version = str(raw.get("entryAudit", {}).get("entryVersion", "unknown"))
-    source = {"kind": "curated_annotation" if raw.get("entryType", "").startswith("UniProtKB reviewed") else "prediction",
+    reviewed = raw.get("entryType", "").startswith("UniProtKB reviewed")
+    source = {"kind": "curated_annotation" if reviewed else "prediction",
               "source": f"https://www.uniprot.org/uniprotkb/{accession}", "version": version,
               "raw_sha256": digest(raw)}
     p = {"protein_id": accession, "accession": accession, "isoform": raw.get("requested_isoform", ""),
          "isoform_ambiguous": not bool(raw.get("requested_isoform")),
          "gene": (raw.get("genes") or [{}])[0].get("geneName", {}).get("value", ""),
          "taxon_id": raw.get("organism", {}).get("taxonId"), "sequence": seq,
+         "reviewed": reviewed, "annotation_score": raw.get("annotationScore"),
          "evidence": source, "features": [], "topology": "unknown", "location": "unknown",
          "notes": ["Canonical fetch does not establish the intended experimental isoform."]}
     # Isoform inventory (recording only, never a screening gate): the main entry
@@ -66,6 +86,13 @@ def normalize(raw):
         if comment.get("commentType") == "SUBCELLULAR LOCATION":
             for entry in comment.get("subcellularLocations", []):
                 locations.append(entry.get("location", {}).get("value", ""))
+        target = COMMENT_TEXT_TYPES.get(comment.get("commentType"))
+        if target:
+            texts = [t.get("value", "") for t in comment.get("texts", []) if t.get("value")]
+            if texts:
+                p.setdefault(target, []).append(
+                    {"text": " ".join(texts),
+                     "eco": [e.get("evidenceCode", "") for e in comment.get("evidences", [])]})
     p["raw_locations"] = locations
     if any(v.lower() in {"cell membrane", "cell surface", "plasma membrane"} for v in locations):
         p["location"] = "plasma_membrane"
@@ -77,7 +104,7 @@ def normalize(raw):
     elif any("membrane" in v.lower() for v in locations):
         p["location"] = "other_membrane"
     for f in raw.get("features", []):
-        kind = {"Signal": "signal_peptide", "Transmembrane": "transmembrane", "Domain": "domain", "Disulfide bond": "disulfide", "Chain": "chain", "Peptide": "processed_peptide", "Propeptide": "propeptide"}.get(f.get("type"))
+        kind = FEATURE_KINDS.get(f.get("type"))
         if f.get("type") == "Lipidation" and "GPI-anchor" in f.get("description", ""):
             kind = "gpi_attachment_site"
         if f.get("type") == "Topological domain":
@@ -92,7 +119,8 @@ def normalize(raw):
             evidence["kind"] = "prediction"
         p["features"].append({"kind": kind, "start": s.get("value"), "end": e.get("value"),
                               "boundary_status": "exact" if s.get("modifier", "EXACT") == e.get("modifier", "EXACT") == "EXACT" else "fuzzy",
-                              "name": f.get("description", kind), "evidence": evidence, "raw_feature": f})
+                              "name": f.get("description", kind), "feature_id": f.get("featureId", ""),
+                              "evidence": evidence, "raw_feature": f})
     tm = [f for f in p["features"] if f["kind"] == "transmembrane"]
     ex = [f for f in p["features"] if f["kind"] == "extracellular"]
     if len(tm) > 1:

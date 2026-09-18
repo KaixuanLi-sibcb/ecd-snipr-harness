@@ -3,9 +3,17 @@
 import re
 from .common import contains, digest, interval, overlaps, sequence, sourced, translate
 from .criteria import assess_context
+from .profile import (INFORMATIONAL_KINDS, PREDICTION_RELEVANT_KINDS, boundary_analysis,
+                      detect_multichain_partners, molecular_profile, n_glyco_sequons)
 
 CONFIGURATION = "antibody_sender_antigen_receiver"
-DEFAULT_RULES = {"short_length": 50, "long_length": 500, "cysteine_fraction": 0.08}
+DEFAULT_RULES = {"short_length": 50, "long_length": 500, "cysteine_fraction": 0.08,
+                 # Review heuristics, never pass/fail thresholds: dense glycosylation
+                 # fires at >= min sequons AND <= max residues per sequon; boundary
+                 # adjacency tolerance is the unannotated gap we still accept as
+                 # agreement-with-tolerance (recorded, not silent).
+                 "dense_glyco_min_sequons": 4, "dense_glyco_max_residues_per_sequon": 50,
+                 "boundary_gap_tolerance": 5}
 
 
 def flag(code, severity="review", detail=""):
@@ -86,7 +94,14 @@ def propose(protein, scaffold=None, rules=None, reviews=()):
                 raise ValueError("Feature lacks source/version/evidence kind")
             features.append(f)
         except ValueError as exc:
-            base_flags.append(flag("feature_annotation_invalid", "block", str(exc)))
+            if f.get("kind") in INFORMATIONAL_KINDS:
+                # Informational annotations (variant/mutagenesis/site/...) never
+                # block; a coordinate problem there is recorded, not fatal. In
+                # batch screening these are deferred earlier by partition_features.
+                base_flags.append(flag("informational_annotation_deferred", "review",
+                                       f"{f.get('kind')}:{f.get('name', '')} — {exc}"))
+            else:
+                base_flags.append(flag("feature_annotation_invalid", "block", str(exc)))
     extracellular = [f for f in features if f["kind"] == "extracellular"]
     tm = [f for f in features if f["kind"] == "transmembrane"]
     chains = [f for f in features if f["kind"] == "chain"]
@@ -201,20 +216,54 @@ def propose(protein, scaffold=None, rules=None, reviews=()):
             risks.append(flag("long_fragment_geometry_review"))
         if fragment.count("C") / len(fragment) >= rules["cysteine_fraction"]:
             risks.append(flag("cysteine_rich_folding_review"))
-        sequons = [start + m.start() for m in re.finditer(r"(?=(N[^P][ST]))", fragment)]
+        sequons = n_glyco_sequons(fragment, start)
         if sequons:
             risks.append(flag("potential_n_glycosylation", detail="Sequon only; occupancy and effect unknown"))
+        if len(sequons) >= rules["dense_glyco_min_sequons"] and \
+                len(fragment) / len(sequons) <= rules["dense_glyco_max_residues_per_sequon"]:
+            risks.append(flag("dense_glycosylation", "review",
+                              f"{len(sequons)} sequons in {len(fragment)} aa (>= {rules['dense_glyco_min_sequons']} and "
+                              f"<= {rules['dense_glyco_max_residues_per_sequon']} aa/sequon); heuristic review item, not a threshold"))
+        cysteine_count = fragment.count("C")
+        if cysteine_count and cysteine_count % 2:
+            risks.append(flag("free_thiol_odd_cysteine", "review",
+                              f"Odd cysteine count ({cysteine_count}): potential unpaired thiol; review folding/interchain-bond context"))
+        multichain = detect_multichain_partners(protein.get("subunit_comments"))
+        if multichain:
+            risks.append(flag("multichain_partner_required", "review",
+                              "SUBUNIT hetero-oligomer annotation: " + " | ".join(multichain)))
         criteria_review, context_risks = assess_context(protein, bounds)
         risks.extend(context_risks)
         missing_criteria = [r["kind"] for r in criteria_review if r["status"] == "missing"]
         incomplete_criteria = any(r["status"] == "missing" or any(v["effective_status"] in {"missing", "unresolved"} for v in r["records"]) for r in criteria_review)
         if missing_criteria:
             risks.append(flag("contextual_risk_evidence_missing", detail=",".join(missing_criteria)))
-        if any(f["evidence"]["kind"] == "prediction" for f in [region] + features if sourced(f)):
+        # Prediction-evidence review is scoped to candidate-defining features:
+        # the candidate's own region plus boundary-defining/domain/disulfide
+        # annotations. A predicted glycosylation site or variant record no
+        # longer raises this boundary-evidence flag.
+        if any(f["evidence"]["kind"] == "prediction" for f in [region] + features
+               if sourced(f) and (f is region or f.get("kind") in PREDICTION_RELEVANT_KINDS)):
             risks.append(flag("prediction_requires_annotation_review"))
+        profile = molecular_profile(bounds, fragment, features, len(seq))
+        boundary = boundary_analysis(bounds, region, features, len(seq), topology,
+                                     tolerance=rules["boundary_gap_tolerance"])
+        for side in ("n_side", "c_side"):
+            code = boundary[side].get("reason_code")
+            if not code:
+                continue
+            adjacent = (boundary[side].get("adjacent_feature") or {})
+            # Severity stays "review" here; screening maps
+            # boundary_feature_conflict to a conditional reason and the
+            # tolerance codes to informational reason codes.
+            risks.append(flag(code, "review",
+                              f"{side}: defining {boundary['defining_feature']['kind']} "
+                              f"{boundary['defining_feature'].get('start')}-{boundary['defining_feature'].get('end')} vs adjacent "
+                              f"{adjacent.get('kind', 'none')} {adjacent.get('start', '?')}-{adjacent.get('end', '?')} "
+                              f"({boundary[side]['status']})"))
         candidate = {
             "protein_id": protein["protein_id"], "gene": protein.get("gene", ""),
-            "accession": protein.get("accession", ""), "isoform": protein.get("isoform", ""),
+            "accession": protein["accession"], "isoform": protein.get("isoform", ""),
             "reference_sha256": digest(seq), "topology": topology,
             "antigen_form_type": form, "criteria_review": criteria_review,
             "risk_review_status": "incomplete" if incomplete_criteria else "records_present_requires_context_review",
@@ -222,6 +271,8 @@ def propose(protein, scaffold=None, rules=None, reviews=()):
             "start": start, "end": end, "coordinate_system": "1-based-inclusive",
             "length": len(fragment), "sequence": fragment, "origin": region["origin"],
             "rationale": region.get("rationale", ""), "boundary_evidence": region.get("evidence", {}),
+            "boundary_analysis": boundary, "molecular_profile": profile,
+            "multichain_partners": multichain,
             "domains_retained": covered, "domains_cut": cut, "domains_omitted": lost,
             "epitope_review": epitopes, "potential_glycosylation_sites": sequons,
             "risks": risks, "scaffold_issues": scaffold_check(scaffold),
