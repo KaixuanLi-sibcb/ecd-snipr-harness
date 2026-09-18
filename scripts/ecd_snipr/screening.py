@@ -534,20 +534,29 @@ def _screen_entry(entry, protein, lab_rules, domain_policy):
         # length and fully contained sourced domains; a loop containing a sourced
         # domain is eligible as a conditional alternate. Recorded explicitly even
         # when no alternate exists; loops are never stitched.
-        loops = enumerate_external_loops(p, p["features"], len(sequence(p["sequence"])))
-        for loop in loops:
-            loop["alternate_candidate_ids"] = [
-                c["candidate_id"] for c in candidates
-                if c.get("origin") == "domain_alternative"
-                and any(c.get("start") == d["start"] and c.get("end") == d["end"]
-                        for d in loop.get("domains_fully_contained", []))]
-        record["multipass_loops"] = loops
-        if loops and not any(l["eligible_domain_alternate"] for l in loops):
-            record.setdefault("missing_info", [])
-            note = ("逐胞外环枚举：没有任何环完整包含有来源的结构域，因此没有条件性备选；"
-                    "不拼接胞外环")
-            if note not in record["missing_info"]:
-                record["missing_info"].append(note)
+        # The length computation must honor the same contract as propose(): a
+        # non-standard residue (e.g. selenocysteine U) makes sequence() raise;
+        # propose() has already recorded reference_sequence_invalid (block), so
+        # enumeration is skipped honestly instead of crashing the entry.
+        try:
+            seq_len = len(sequence(p["sequence"]))
+        except ValueError:
+            seq_len = None
+        if seq_len is not None:
+            loops = enumerate_external_loops(p, p["features"], seq_len)
+            for loop in loops:
+                loop["alternate_candidate_ids"] = [
+                    c["candidate_id"] for c in candidates
+                    if c.get("origin") == "domain_alternative"
+                    and any(c.get("start") == d["start"] and c.get("end") == d["end"]
+                            for d in loop.get("domains_fully_contained", []))]
+            record["multipass_loops"] = loops
+            if loops and not any(l["eligible_domain_alternate"] for l in loops):
+                record.setdefault("missing_info", [])
+                note = ("逐胞外环枚举：没有任何环完整包含有来源的结构域，因此没有条件性备选；"
+                        "不拼接胞外环")
+                if note not in record["missing_info"]:
+                    record["missing_info"].append(note)
     if deferred:
         record["deferred_annotations"] = deferred
         record.setdefault("reason_codes", [])

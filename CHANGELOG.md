@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1 - 2026-09-18
+
+Bug fix found by the first full-scale run (7,783 reviewed human membrane proteins, UniProtKB 2026_03). No classification semantics change.
+
+- **Multi-pass loop enumeration no longer crashes on non-standard residues.** In 0.4.0 the per-loop enumeration called `sequence()` unguarded (`screening.py`), so a multi-pass entry whose sequence contains a non-standard residue (e.g. selenocysteine U in Q9C0D9/SELENOI) escaped as a technical failure instead of carrying the `reference_sequence_invalid` block that `propose()` already records gracefully. Enumeration now honors the same contract: invalid reference sequence → loops skipped honestly, entry classified normally. Regression test added (160 tests total).
+- Full-run provenance: the run that found this is preserved as a superseded bundle (`validation_fullrun/full_screen/07ff9035ddd5a1ef1e6b`, v0.4.0, 1 technical failure); the fixed rerun is the reference bundle. See validation_fullrun/RUN_REPORT.md.
+
 ## 0.4.0 - 2026-09-17
 
 Deep screening round over 0.3.1: same workflow, same four classes, same blocking semantics — the screening layer now reads much more of the annotation already present in each UniProt entry and records what it finds explicitly. No composite scores, no per-protein LLM, no structure prediction; length/cysteine/glycosylation remain review warnings, never thresholds.

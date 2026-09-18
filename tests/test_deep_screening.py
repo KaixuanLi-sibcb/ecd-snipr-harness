@@ -314,6 +314,23 @@ class MultiPassLoopTests(unittest.TestCase):
         self.assertEqual(loops[-1]["length"], None)
         self.assertIn("deferred", loops[-1]["note"])
 
+    def test_multipass_nonstandard_residue_blocks_gracefully_not_crash(self):
+        """v0.4.1 regression (found by the 7,783-entry full run, Q9C0D9/SELENOI):
+        a multi-pass protein carrying selenocysteine (U) must be classified
+        with the reference_sequence_invalid block from propose(); the loop
+        enumeration must not re-raise on the invalid sequence."""
+        p = self._multi("P96004")
+        p["sequence"] = p["sequence"][:30] + "U" + p["sequence"][31:]
+        temp, result, records, candidates = screen_one(p)
+        rec = records[0]
+        self.assertEqual(rec["processing_status"], "ok")
+        self.assertIn("reference_sequence_invalid", rec["reason_codes"])
+        self.assertNotIn("multipass_loops", rec)  # skipped honestly, not faked
+        # Invalid reference sequence means the entry cannot be evaluated, which
+        # the decision table maps to insufficient_evidence (not a route verdict).
+        self.assertEqual(rec["screening_recommendation"], "insufficient_evidence")
+        temp.cleanup()
+
 
 class ScopedPredictionTests(unittest.TestCase):
     def test_predicted_informational_feature_no_longer_raises_boundary_flag(self):
