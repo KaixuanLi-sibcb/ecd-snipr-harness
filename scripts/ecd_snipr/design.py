@@ -76,7 +76,7 @@ def propose(protein, scaffold=None, rules=None, reviews=()):
         base_flags.append(flag("plasma_membrane_not_confirmed", "review", protein.get("location", "unknown")))
     if topology == "secreted":
         base_flags.append(flag("secreted_antigen_scope_extension", detail="Tethered antigen candidate, not a native cell-surface target"))
-        if protein.get("location") != "secreted":
+        if protein.get("location") != "secreted" and not protein.get("has_secreted_reference_annotation"):
             base_flags.append(flag("secreted_location_unconfirmed", "block"))
     if topology == "type_ii":
         base_flags.append(flag("type_ii_attachment_orientation_change", detail="Native N-terminal attachment becomes C-terminal attachment in this receiver"))
@@ -230,8 +230,8 @@ def propose(protein, scaffold=None, rules=None, reviews=()):
                               f"Odd cysteine count ({cysteine_count}): potential unpaired thiol; review folding/interchain-bond context"))
         multichain = detect_multichain_partners(protein.get("subunit_comments"))
         if multichain:
-            risks.append(flag("multichain_partner_required", "review",
-                              "SUBUNIT hetero-oligomer annotation: " + " | ".join(multichain)))
+            risks.append(flag("native_heteromer_context_requires_review", "review",
+                              "Native SUBUNIT context, not proof of ECD partner dependence: " + " | ".join(multichain)))
         criteria_review, context_risks = assess_context(protein, bounds)
         risks.extend(context_risks)
         missing_criteria = [r["kind"] for r in criteria_review if r["status"] == "missing"]
@@ -281,6 +281,13 @@ def propose(protein, scaffold=None, rules=None, reviews=()):
             "functional_status": "not_experimentally_validated",
         }
         candidate["candidate_id"] = "cand-" + digest([protein["protein_id"], seq, start, end, form])[:16]
+        selection = protein.get("reference_selection")
+        if selection:
+            if selection.get("experimental_isoform_confirmation") != "performed":
+                candidate["scaffold_issues"].append(flag("experimental_isoform_not_confirmed", "block",
+                                                       "Analysis reference selection does not authorize fusion assembly"))
+            if selection.get("selected_sequence_sha256") and selection["selected_sequence_sha256"] != digest(seq):
+                candidate["scaffold_issues"].append(flag("reference_selection_sequence_changed", "block"))
         candidate["review_key"] = digest({"protein": protein, "region": region, "scaffold": scaffold, "rules": rules})
         review = next((r for r in reviews if r.get("review_key") == candidate["review_key"]), None)
         required_ack = {r["code"] for r in risks if r["severity"] == "review"}

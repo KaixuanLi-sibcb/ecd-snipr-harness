@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.5.0 - 2026-09-20 (methodology and evidence upgrade)
+
+- Preserve the v0.4.2 reference/isoform fixes and candidate engine. Separate four-class design advice from per-feature annotation support, receiver planning, assembly authorization and four experimental endpoints.
+- Replace warning-count primary selection with explicit integrity / mapped-epitope-loss / antigen-form / deterministic-ID tradeoffs. Full mature forms remain preferred when preceding dimensions are equal. No length-based truncation, new sequences or success scores.
+- Expose boundary ECO/provenance independent of reviewed entry status; remove the reviewed/unreviewed classification shortcut. This is a changed policy, not validated improvement in biological accuracy. Unknown ECO stays unclassified; absent ECO is not experimental evidence.
+- Missing extracellular/mature GPI boundaries become insufficient evidence, distinct from no supported autonomous route in current annotations. Add route state and next evidence action to every input row, including duplicates, exclusions and failures.
+- Explicitly make mapped epitope loss and annotated disulfide crossings conditional design issues. Keep unknown epitopes and unassessed contextual literature nonblocking.
+- Add candidate_comparison.tsv, receiver_review_plan.tsv, pending stratified manual_review_queue.tsv and methodology summary. `screen --review-per-stratum` changes reproducible audit coverage, not functional ranking.
+- No full rerun, private analysis, actual scaffold assembly, GitHub push or installation replacement implied. Historical output bundles and the original installed skill are preserved.
+
+### Public-run verification and repository synchronization
+
+- Separately authorized full execution completed on the declared UniProtKB 2026_03 human reviewed membrane-related query: 7,783 reference entries, 7,746 unique gene labels, zero technical failures. Live set membership; checksum-verified public annotations retrieved on 2026-09-18 and re-normalized by v0.5.0.
+- 566 standard / 1,243 conditional / 1,597 no supported route / 2,289 insufficient evidence; 2,088 outside scope. The evaluated denominator is 5,695, including 346 separately counted secreted-extension references. 1,809 references have primary candidates; 2,105 unblocked fragments were exported. These are computational coverage counts, not experimental validation.
+- 200 unit tests and 23 independent full-run integrity/sequence checks passed locally. Every primary candidate still lacks mapped epitope evidence in this run; four functional endpoints remain unmeasured and all 93 stratified review records remain pending.
+- Publish aggregate public-data metadata only, with limitations and reproducibility commands in references/public-run-v050.md. No workbooks, private experimental records, full run bundles or caches are included. A nonblocking mixed-format reason-code issue is disclosed; the frozen engine and original run are unchanged.
+
+## 0.4.2 - 2026-09-20 (local audit revision)
+
+- Correct canonical reference labels using Displayed isoform IDs or a canonical marker; preserve unsupported noncanonical requests as unresolved.
+- Stop projecting other-isoform feature coordinates and unmatched molecule-specific comments onto the reference; preserve excluded raw evidence. Recognize exact named main-chain context without borrowing shed-form context.
+- Separate generic membrane from organelle-only location; support named plasma-membrane sublocations without losing a documented secreted-extension route.
+- Keep invalid essential topology/exclusion features blocking even if another of the same kind is valid.
+- Evaluate candidate recommendations independently; blocked alternatives cannot inherit the primary protein recommendation.
+- Enforce experimental isoform confirmation at fusion export for explicitly selected analysis references, without blocking fragments. Native heteromer wording is a context review, not proven ECD dependency; withhold obvious negation.
+- Align all version fields and validate consistency. Correct an earlier memory claim: normalized references load one at a time, but output records/candidates are retained, so peak memory is not constant.
+- Add synthetic audit regressions. Historical bundles are unchanged; no full revised coverage or biological accuracy is claimed. See references/audit-v042.md for migration and limits.
+
 ## 0.4.1 - 2026-09-18
 
 Bug fix found by the first full-scale run (7,783 reviewed human membrane proteins, UniProtKB 2026_03). No classification semantics change.

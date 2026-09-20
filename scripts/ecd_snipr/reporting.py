@@ -11,8 +11,9 @@ from pathlib import Path
 from .common import now, tsv, write_json
 from .harness import CANDIDATE_COLUMNS
 from .screening import SCREENING_COLUMNS, CLASSES
+from .methodology import methodology_summary, review_queue
 
-CANDIDATE_TSV_COLUMNS = CANDIDATE_COLUMNS + ["screening_recommendation", "is_primary", "junction_notes"]
+CANDIDATE_TSV_COLUMNS = CANDIDATE_COLUMNS + ["screening_recommendation", "screening_reason_codes", "screening_rationale", "protein_screening_recommendation", "is_primary", "junction_notes", "annotation_support", "candidate_comparison", "receiver_review"]
 
 TOPOLOGY_ORDER = ["type_i", "type_ii", "gpi", "multi_pass", "secreted", "intracellular", "unknown"]
 
@@ -81,6 +82,11 @@ def _rows_for_screening(records, entries, candidates):
             "lab_rules_status": (r.get("lab_rules") or {}).get("status", ""),
             "processing_status": r.get("processing_status", ""),
             "processing_error": r.get("processing_error", ""),
+            "route_state": r.get("route_diagnostic", {}).get("state", ""),
+            "next_action": r.get("route_diagnostic", {}).get("next_action", ""),
+            "primary_annotation_support": p.get("annotation_support", {}),
+            "primary_candidate_comparison": p.get("candidate_comparison", {}),
+            "receiver_review_status": p.get("receiver_review", {}).get("status", "not_assessed_no_primary"),
         })
     return rows
 
@@ -388,16 +394,33 @@ def figure_source_data(summary):
 
 
 def export_screening_outputs(run_dir, definition, records, candidates, version, engine_sha256, pilot,
-                             completeness_override=None):
+                             completeness_override=None, review_per_stratum=2):
     run_dir = Path(run_dir)
     summary = build_summary(definition, records, candidates, version, engine_sha256, pilot,
                             completeness_override=completeness_override)
+    summary["methodology"] = methodology_summary(records, candidates)
+    queue = review_queue(records, candidates, review_per_stratum)
+    summary["methodology"]["review_queue"] = {"rows": len(queue), "per_stratum": review_per_stratum,
+                                                "purpose": "purposive_manual_audit_not_accuracy_estimation"}
     write_json(run_dir / "screening.json", records)
     write_json(run_dir / "candidates.json", candidates)
     write_json(run_dir / "summary.json", summary)
     write_json(run_dir / "screening_overview_data.json", figure_source_data(summary))
     tsv(run_dir / "protein_screening.tsv", _rows_for_screening(records, definition["entries"], candidates), SCREENING_COLUMNS)
     tsv(run_dir / "candidate_plan.tsv", candidates, CANDIDATE_TSV_COLUMNS)
+    tsv(run_dir / "candidate_comparison.tsv", [{"candidate_id": c["candidate_id"], "protein_id": c["protein_id"],
+        "is_primary": c.get("is_primary"), "design_status": c.get("design_status"),
+        **c["candidate_comparison"]} for c in candidates],
+        ["candidate_id", "protein_id", "is_primary", "design_status", "integrity_disruptions", "mapped_epitope_status",
+         "mapped_epitope_losses", "domains_retained", "domains_cut", "domains_omitted", "disulfide_crossings",
+         "selection_axes", "selection_key", "selection_limit", "repertoire_statement"])
+    tsv(run_dir / "receiver_review_plan.tsv", [{"candidate_id": c["candidate_id"], "protein_id": c["protein_id"],
+        **check} for c in candidates for check in c["receiver_review"]["checks"]],
+        ["candidate_id", "protein_id", "check", "status", "question", "candidate_reason_codes"])
+    tsv(run_dir / "manual_review_queue.tsv", queue,
+        ["entry_id", "accession", "isoform", "candidate_id", "stratum_id", "stratum", "stratum_population",
+         "selection_policy", "review_status", "independent_boundary", "reviewer", "source", "disagreement_reason",
+         "surface_expression", "recognition_retention", "basal_activation", "induced_response"])
     with (run_dir / "candidate_fragments.fasta").open("w", encoding="utf-8") as handle:
         for c in candidates:
             if c.get("sequence") and c.get("design_status") != "blocked":
@@ -405,5 +428,13 @@ def export_screening_outputs(run_dir, definition, records, candidates, version, 
                 handle.write(f">{c['candidate_id']} {c['protein_id']}:{c['start']}-{c['end']} "
                              f"form={c['antigen_form_type']} {role} UNVALIDATED\n{c['sequence']}\n")
     (run_dir / "screening_overview.svg").write_text(figure_svg(summary), encoding="utf-8")
-    (run_dir / "PI_SUMMARY.md").write_text(pi_summary(summary, records), encoding="utf-8")
+    methodological_note = ("\n## 证据与下一步核验\n\n"
+        "初筛类别与证据类型分开：reviewed 不等于边界实验验证。逐候选 annotation_support 保留来源与 ECO；未知代码不推定实验支持。\n\n"
+        "主要候选按已注释结构完整性、已映射表位丢失、完整成熟形式优先级和确定性 ID 顺序比较，"
+        "不使用风险条数或未经校准总分。缺少表位不等于保留已获证明。详见 candidate_comparison.tsv。\n\n"
+        "receiver_review_plan.tsv 是接收端核验问题清单，不是已验证连接设计。"
+        "manual_review_queue.tsv 是分层目的性抽审清单，不用于估计生物学准确率；空白终点表示未测，不是失败。\n\n"
+        f"路线诊断（分母为全部 {len(records)} 输入行，包括单列重复与技术失败）：{summary['methodology']['route_states']}\n"
+        f"本轮待人工抽审 {len(queue)} 行；不得由 agent 自动批准或将同一基因拆分为独立训练/验证样本。\n")
+    (run_dir / "PI_SUMMARY.md").write_text(pi_summary(summary, records) + methodological_note, encoding="utf-8")
     return summary

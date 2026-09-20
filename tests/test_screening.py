@@ -175,7 +175,7 @@ class AcquisitionTests(unittest.TestCase):
         self.assertEqual(p["reference_selection"]["basis"], "database_canonical")
         self.assertEqual(p["reference_selection"]["experimental_isoform_confirmation"], "not_performed")
         self.assertFalse(p["isoform_ambiguous"])
-        self.assertEqual(p["isoform"], "P00001-1")
+        self.assertEqual(p["isoform"], "P00001:canonical")
         # Screening proceeds, but the missing confirmation is explicit.
         candidates, flags = propose(p)
         self.assertNotIn("isoform_unresolved", {f["code"] for f in flags})
@@ -447,8 +447,8 @@ class ScreeningDecisionTests(unittest.TestCase):
         unreviewed["features"][1]["evidence"]["kind"] = "prediction"
         unreviewed["evidence"] = {"kind": "prediction", "source": "synthetic://software-tests", "version": "1"}
         _, records = self._screen([unreviewed])
-        self.assertEqual(records[0]["screening_recommendation"], "conditional_candidate")
-        self.assertIn("prediction_requires_annotation_review", records[0]["reason_codes"])
+        self.assertEqual(records[0]["screening_recommendation"], "standard_candidate")
+        self.assertNotIn("prediction_requires_annotation_review", records[0]["reason_codes"])
 
 
 class RunnerTests(unittest.TestCase):

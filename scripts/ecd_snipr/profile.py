@@ -245,7 +245,9 @@ def boundary_analysis(bounds, region, features, seq_len, topology, tolerance=5):
 def detect_multichain_partners(subunit_comments):
     """Explicit hetero-oligomer assembly sentences from SUBUNIT comments.
 
-    Returns the matched sentences verbatim (they are the named chain evidence).
+    Returns matched sentences verbatim as native context, not proof that an
+    isolated antigen fragment needs the partner. Obvious negation is withheld;
+    this lexical triage is not a complete natural-language entailment model.
     Only fires on explicit hetero-*mer wording; homo-oligomers, bare
     "interacts with" and "part of a complex" phrasing stay unflagged.
     """
@@ -253,7 +255,7 @@ def detect_multichain_partners(subunit_comments):
     for comment in subunit_comments or []:
         text = comment.get("text", "") if isinstance(comment, dict) else str(comment)
         for sentence in re.split(r"(?<=[.!?])\s+", text):
-            if HETERO_ASSEMBLY_RE.search(sentence):
+            if HETERO_ASSEMBLY_RE.search(sentence) and not re.search(r"\b(?:not|no|neither|never|unable|cannot|fails?\s+to)\b", sentence, re.I):
                 cleaned = sentence.strip()
                 if cleaned and cleaned not in matches:
                     matches.append(cleaned)

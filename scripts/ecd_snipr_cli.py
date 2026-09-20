@@ -71,6 +71,8 @@ def parser():
     sub.add_argument("--domain-policy", choices=["auto", "full_ecd_only", "full_ecd_and_domains"], default="auto",
                      help="auto: multi-pass references explicitly opt into sourced external-domain alternates")
     sub.add_argument("--pilot", action="store_true", help="Label all outputs and the figure as a small pilot run")
+    sub.add_argument("--review-per-stratum", type=int, default=2,
+                     help="Pending manual-review rows per topology/class/evidence stratum (1-100, default 2); not an accuracy sample")
     sub.add_argument("--offline", action="store_true")
     sub.add_argument("--refresh", action="store_true")
     sub.add_argument("--limit", type=int)
@@ -134,7 +136,8 @@ def main(argv=None):
             set_dir = args.set_outdir or str(Path(args.outdir) / "analysis_set")
             _build_set_command(args, set_dir)
         result = run_screening(set_dir, args.outdir, lab_rules_path=args.lab_rules,
-                               domain_policy=args.domain_policy, pilot=args.pilot, resume=args.resume)
+                               domain_policy=args.domain_policy, pilot=args.pilot, resume=args.resume,
+                               review_per_stratum=args.review_per_stratum)
         summary = result["summary"]
         print(json.dumps({"run_dir": result["run_dir"], "execution": result["execution"],
                           "set_completeness": summary["completeness"]["state"],

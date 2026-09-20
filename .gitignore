@@ -6,6 +6,12 @@ coverage_output/
 private_output/
 outputs/
 cache/
+runs/
+sets/
+public_cache/
+analysis_set/
+full_run*/
+validation_*/
 dist/
 backup/
 __pycache__/

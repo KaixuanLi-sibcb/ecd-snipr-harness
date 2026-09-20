@@ -240,10 +240,16 @@ def select_analysis_reference(protein, confirmation="not_performed"):
     entry document does not carry isoform sequences.
     """
     p = protein
-    if p.get("isoform") and not p.get("isoform_ambiguous"):
+    if p.get("reference_coordinate_status") == "unverified_noncanonical_request":
+        basis = "unresolved_noncanonical"
+        rationale = "Requested isoform sequence/coordinates are not established by the canonical entry JSON"
+    elif p.get("isoform") and not p.get("isoform_ambiguous"):
         basis, rationale = "explicit_isoform", "Input named an explicit accession/isoform; used as the analysis reference"
     else:
-        p["isoform"] = p.get("accession", "") + "-1"
+        displayed = sorted({v for i in (p.get("alternative_products") or {}).get("isoforms", [])
+                            if i.get("sequence_status", "").lower() == "displayed"
+                            for v in i.get("isoform_ids", [])})
+        p["isoform"] = displayed[0] if len(displayed) == 1 else p.get("accession", "") + ":canonical"
         p["isoform_ambiguous"] = False
         basis = "database_canonical"
         rationale = ("Screening explicitly selected the database canonical sequence as the analysis reference. "
@@ -259,6 +265,8 @@ def select_analysis_reference(protein, confirmation="not_performed"):
         iso_note = "无 ALTERNATIVE PRODUCTS 注释（未注释可变 isoform，不证明不存在）"
     p["reference_selection"] = {"basis": basis, "selected_isoform": p["isoform"], "rationale": rationale,
                                 "experimental_isoform_confirmation": confirmation,
+                                "selected_sequence_sha256": digest(p.get("sequence", "")),
+                                "selected_entry_version": p.get("evidence", {}).get("version"),
                                 "annotated_isoform_count": (ap or {}).get("isoform_count"),
                                 "isoform_comparison": "not_evaluated",
                                 "isoform_comparison_note": iso_note,
@@ -273,9 +281,11 @@ def disposition(protein):
     tm = [f for f in protein.get("features", []) if f.get("kind") == "transmembrane"]
     external = [f for f in protein.get("features", []) if f.get("kind") == "extracellular"]
     gpi = [f for f in protein.get("features", []) if f.get("kind") == "gpi_attachment_site"]
-    membership = "yes" if (tm or gpi or location in {"plasma_membrane", "other_membrane"}) else \
+    membership = "yes" if (tm or gpi or location in {"plasma_membrane", "other_membrane", "membrane_unspecified"}) else \
         "no" if topology in {"secreted", "intracellular"} or location == "secreted" else "undetermined"
-    if topology == "secreted" or location == "secreted":
+    if topology == "secreted" and location == "plasma_membrane":
+        surface = "undetermined"  # dual annotated/peripheral presentation is not an integral surface-target proof
+    elif topology == "secreted" or location == "secreted":
         surface = "no"
     elif location == "plasma_membrane" and (external or topology in {"type_i", "type_ii", "gpi"}):
         surface = "yes"
@@ -303,6 +313,8 @@ def disposition(protein):
         notes.append("gpi_disposition: mature boundary and omega residue must be verified")
     if location == "other_membrane":
         notes.append("organelle_disposition: lumenal/extracellular confusion is not resolved automatically")
+    if location == "membrane_unspecified":
+        notes.append("generic membrane annotation: surface localization unknown; not an organelle exclusion")
     if topology == "unknown":
         notes.append("under_annotated_disposition: retained for screening; likely insufficient_evidence without topology/boundary support")
     return {"membrane_set_membership": membership, "natural_cell_surface_target": surface,

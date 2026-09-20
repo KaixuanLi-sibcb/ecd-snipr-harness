@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from ecd_snipr.common import file_hash, read_json
 from ecd_snipr.contracts import validate_project
+from ecd_snipr import __version__
 
 FORBIDDEN = {"local_data", "real_data_output", "smoke_test_output", "live_validation_output", "coverage_output", "private_output", "outputs", "cache", ".git", "__pycache__", ".pytest_cache", "dist", "backup"}
 
@@ -64,6 +65,9 @@ def validate(root):
     skill = (root / "SKILL.md").read_text()
     checks["frontmatter"] = skill.startswith("---\nname: ecd-snipr-harness\ndescription:")
     checks["manifest_paths"] = bool(paths)
+    project_version = re.search(r'^version\s*=\s*"([^"]+)"', (root / "pyproject.toml").read_text(), re.M)
+    checks["version_consistency"] = bool(project_version and project_version.group(1) ==
+                                         read_json(root / "manifest.json").get("version") == __version__)
     for path in root.joinpath("scripts").glob("*.py"):
         command = subprocess.run([sys.executable, str(path), "--help"], capture_output=True)
         checks[path.name + "_help"] = command.returncode == 0

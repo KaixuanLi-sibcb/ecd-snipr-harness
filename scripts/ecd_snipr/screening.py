@@ -19,6 +19,8 @@ from .common import digest, file_hash, now, read_json, sequence, tsv, write_json
 from .design import propose
 from .harness import CANDIDATE_COLUMNS, engine_hash, verify_bundle
 from .profile import enumerate_external_loops
+from .methodology import (SELECTION_AXES, annotation_support, candidate_tradeoff,
+                          receiver_review, route_diagnostic, selection_key)
 
 CLASSES = ("standard_candidate", "conditional_candidate", "no_standard_route", "insufficient_evidence")
 
@@ -37,15 +39,17 @@ CONDITIONAL_CODES = {
     "multiple_processed_chains_dependency_unknown",
     "discontinuous_or_multipass",
     "domain_fragment_independence_unproven",
-    "prediction_requires_annotation_review",
     "plasma_membrane_not_confirmed",
-    "multichain_partner_required",   # SUBUNIT records explicit hetero-oligomer assembly
+    "multichain_partner_required",   # legacy imported records
+    "native_heteromer_context_requires_review",
     "boundary_feature_conflict",     # candidate boundary disagrees with adjacent annotation
 }
 
 # The engine raises the review-level risk `domain_cut` with the domain identity;
 # screening surfaces it as the conditional reason `domain_cut_by_boundary`.
-RISK_TO_CONDITIONAL_REASON = {"domain_cut": "domain_cut_by_boundary"}
+RISK_TO_CONDITIONAL_REASON = {"domain_cut": "domain_cut_by_boundary",
+                              "disulfide_partner_removed": "annotated_disulfide_crosses_boundary",
+                              "known_epitope_loss": "mapped_epitope_repertoire_reduced"}
 
 # Informational reason codes: recorded for transparency, never change the class.
 INFORMATIONAL_REASON_CODES = {"tm_adjacency_tolerance_used", "boundary_adjacency_tolerance_used"}
@@ -63,13 +67,13 @@ INSUFFICIENT_CODES = {
     "topology_orientation_conflict",
     "multipass_topology_incomplete",
     "secreted_topology_conflict",
+    "extracellular_boundary_missing",
+    "gpi_mature_boundary_missing",
 }
 
-FORM_PRIORITY = {"full_ecd": 0, "mature_gpi": 1, "mature_secreted": 2, "shed_product": 3, "domain_fragment": 4}
-
 # Feature kinds whose coordinates define or block candidates. Fuzzy/invalid
-# annotations of these kinds stay blocking when they are the only annotation
-# of that kind (a genuine coordinate problem is preserved). Fuzzy secondary
+# annotations of these kinds stay blocking even if another is valid.
+# Multiple TM/SP/propeptide regions need independent exclusion. Fuzzy secondary
 # annotations (a shed-form chain on a type-I receptor, an alternative splice
 # chain, a fuzzy domain/disulfide/epitope) are deferred with an explicit
 # record instead of poisoning an otherwise exact candidate.
@@ -89,6 +93,8 @@ SCREENING_COLUMNS = [
     "reason_codes", "rationale", "main_risks", "missing_info", "not_evaluated", "deferred_annotations",
     "primary_molecular_profile", "primary_boundary_analysis", "multichain_partners", "multipass_loops",
     "lab_rules_status", "processing_status", "processing_error",
+    "route_state", "next_action", "primary_annotation_support", "primary_candidate_comparison",
+    "receiver_review_status",
 ]
 
 
@@ -153,31 +159,22 @@ def pick_primary(candidates):
     """Explicit deterministic primary-candidate rule; alternates keep reasons."""
     usable = [c for c in candidates if _usable(c)]
 
-    def key(c):
-        codes = {r["code"] for r in c.get("risks", [])}
-        return (FORM_PRIORITY.get(c.get("antigen_form_type"), 9),
-                len(codes & CONDITIONAL_CODES),
-                sum(r.get("severity") == "review" for r in c.get("risks", [])),
-                c["candidate_id"])
-
-    ordered = sorted(usable, key=key)
+    ordered = sorted(usable, key=selection_key)
     if not ordered:
         return None, []
     primary, rest = ordered[0], ordered[1:]
-    primary_key = key(primary)
+    primary_key = selection_key(primary)
     alternates = []
     for c in rest:
-        c_key = key(c)
-        if c_key[0] > primary_key[0]:
-            reason = "完整抗原形式优先于该形式（form priority）"
-        elif c_key[1] > primary_key[1]:
-            reason = "该备选有更多需特殊设计/核验的问题"
-        elif c_key[2] > primary_key[2]:
-            reason = "该备选有更多待审阅风险记录"
-        else:
-            reason = "并列后按确定性次序（candidate_id）排列"
+        c_key = selection_key(c)
+        axis = next(i for i, (a, b) in enumerate(zip(primary_key, c_key)) if a != b)
+        reason = ["主候选避免了该备选的已注释结构域切割/跨边界二硫键",
+                  "主候选避免了该备选的已映射表位序列丢失（不代表识别已验证）",
+                  "以上取舍相同时优先完整成熟抗原形式，保留探索表位范围",
+                  "生物学取舍并列；candidate_id 仅用于可复现排序，不表示优劣"][axis]
         alternates.append({"candidate_id": c["candidate_id"], "antigen_form_type": c.get("antigen_form_type"),
-                           "start": c.get("start"), "end": c.get("end"), "reason_not_primary": reason})
+                           "start": c.get("start"), "end": c.get("end"), "reason_not_primary": reason,
+                           "deciding_axis": SELECTION_AXES[axis], "comparison": candidate_tradeoff(c)})
     return primary, alternates
 
 
@@ -222,6 +219,12 @@ def recommend(protein, candidates, base_flags, entry=None, lab_rules=None):
         record["reason_codes"] = list(record["scope_reason_codes"])
         return record
     lacking = sorted(base_codes & INSUFFICIENT_CODES)
+    if not candidates and not lacking:
+        kinds = {f.get("kind") for f in protein.get("features", [])}
+        if topology in {"type_i", "type_ii", "multi_pass"} and "extracellular" not in kinds:
+            lacking = ["extracellular_boundary_missing"]
+        elif topology == "gpi":
+            lacking = ["gpi_mature_boundary_missing"]
     if lacking:
         record["screening_recommendation"] = "insufficient_evidence"
         record["reason_codes"] = lacking
@@ -243,10 +246,6 @@ def recommend(protein, candidates, base_flags, entry=None, lab_rules=None):
         if risk_code in codes and reason_code not in conditional:
             conditional.append(reason_code)
     conditional.sort()
-    if "prediction_requires_annotation_review" in conditional and protein.get("evidence", {}).get("kind") == "curated_annotation":
-        # Reviewed entry: prediction-evidence boundaries remain a review-level
-        # risk but do not downgrade the class. Unreviewed entries stay conditional.
-        conditional.remove("prediction_requires_annotation_review")
     info_codes = sorted(set(codes) & INFORMATIONAL_REASON_CODES)
     cls = "conditional_candidate" if conditional else "standard_candidate"
     record.update(screening_recommendation=cls, primary_candidate_id=primary["candidate_id"], alternates=alternates)
@@ -267,16 +266,16 @@ def recommend(protein, candidates, base_flags, entry=None, lab_rules=None):
     record["reason_codes"] = (conditional if conditional else ["positive_sequence_topology_boundary_evidence"]) + \
         [c for c in info_codes if c not in conditional]
     if cls == "standard_candidate":
-        record["rationale"] = ("有明确参考序列、适用的拓扑与区间依据，能够提出常规候选；"
-                               "这证明候选在计算上成立，不证明表达或激活成功")
+        record["rationale"] = ("有明确参考序列、适用的拓扑与区间注释，能够提出常规候选；"
+                               "注释可能源于预测或相似性，证据类型另列，不证明表达、识别或激活成功")
     else:
         record["rationale"] = "有具体、有来源的候选，但存在需要特殊设计或重点核验的明确问题：" + ", ".join(conditional)
     if "domain_cut_by_boundary" in conditional:
         cut_detail = (primary.get("molecular_profile") or {}).get("domains_cut", [])
         record["rationale"] += "；候选边界切割已注释结构域：" + ", ".join(
             f"{d['name']}({d['start']}-{d['end']}, {d.get('cut_side', '')})" for d in cut_detail)
-    if "multichain_partner_required" in conditional and primary.get("multichain_partners"):
-        record["rationale"] += "；SUBUNIT 注释的异源多聚体搭档证据：" + " | ".join(primary["multichain_partners"])
+    if {"multichain_partner_required", "native_heteromer_context_requires_review"} & set(conditional) and primary.get("multichain_partners"):
+        record["rationale"] += "；天然 SUBUNIT 异源多聚体背景（不证明片段依赖搭档）：" + " | ".join(primary["multichain_partners"])
     if "boundary_feature_conflict" in conditional:
         ba = primary.get("boundary_analysis") or {}
         sides = [s for s in ("n_side", "c_side") if (ba.get(s) or {}).get("reason_code") == "boundary_feature_conflict"]
@@ -333,15 +332,19 @@ def recommend(protein, candidates, base_flags, entry=None, lab_rules=None):
     return record
 
 
-def run_screening(set_dir, outdir, lab_rules_path=None, domain_policy="auto", pilot=False, resume=False):
+def run_screening(set_dir, outdir, lab_rules_path=None, domain_policy="auto", pilot=False, resume=False,
+                  review_per_stratum=2):
     """Batch screening bundle: per-item isolation, resume, partial marking.
 
     Protein records are loaded and hash-verified one entry at a time: a
     corrupted or unreadable record is that entry's technical failure, never a
-    whole-run abort, and peak memory does not scale with set size.
+    whole-run abort. Output records/candidates are retained in memory, so memory
+    still grows with the number of exported results.
     """
     if domain_policy not in {"auto", "full_ecd_only", "full_ecd_and_domains"}:
         raise ValueError("Unknown domain policy")
+    if type(review_per_stratum) is not int or not 1 <= review_per_stratum <= 100:
+        raise ValueError("review-per-stratum must be an integer between 1 and 100")
     set_path = Path(set_dir)
     definition = read_json(set_path / "set_definition.json")
 
@@ -354,7 +357,7 @@ def run_screening(set_dir, outdir, lab_rules_path=None, domain_policy="auto", pi
         return read_json(path)
 
     lab_rules = load_lab_rules(lab_rules_path) if lab_rules_path else None
-    options = {"domain_policy": domain_policy, "pilot": bool(pilot),
+    options = {"domain_policy": domain_policy, "pilot": bool(pilot), "review_per_stratum": review_per_stratum,
                "lab_rules_sha256": file_hash(lab_rules_path) if lab_rules_path else None}
     code_hash = engine_hash()
     run_key = digest({"set": definition["set_id"], "entries": definition["entries"],
@@ -408,6 +411,7 @@ def run_screening(set_dir, outdir, lab_rules_path=None, domain_policy="auto", pi
                           "lab_rules": {"status": "尚未纳入" if not lab_rules else "not_applied"},
                           "functional_status": "not_experimentally_validated"}
                 candidates = []
+            record["route_diagnostic"] = route_diagnostic(record, candidates)
             records.append(record)
             all_candidates.extend(candidates)
         event("screening", "complete", records=len(records), candidates=len(all_candidates))
@@ -415,7 +419,7 @@ def run_screening(set_dir, outdir, lab_rules_path=None, domain_policy="auto", pi
         primary_by_protein = {r["protein_id"]: r for r in records if r.get("primary_candidate_id")}
         for c in all_candidates:
             rec = primary_by_protein.get(c.get("protein_id"))
-            c["screening_recommendation"] = rec["screening_recommendation"] if rec else None
+            c["protein_screening_recommendation"] = rec["screening_recommendation"] if rec else None
             c["is_primary"] = bool(rec and c["candidate_id"] == rec["primary_candidate_id"])
             c["junction_notes"] = junction_notes(c, {"topology": c.get("topology", "unknown")})
         from .reporting import export_screening_outputs
@@ -426,7 +430,7 @@ def run_screening(set_dir, outdir, lab_rules_path=None, domain_policy="auto", pi
         completeness_override = "partial" if screen_failures > defined_failures else None
         summary = export_screening_outputs(run_dir, definition, records, all_candidates,
                                            version=__version__, engine_sha256=code_hash, pilot=pilot,
-                                           completeness_override=completeness_override)
+                                           completeness_override=completeness_override, review_per_stratum=review_per_stratum)
         event("export", "complete")
         state["state"] = "complete"
         state["set_completeness"] = summary["completeness"]["state"]
@@ -443,8 +447,8 @@ def partition_features(protein):
     """Split features into engine input vs explicitly deferred annotations.
 
     Only screening uses this; the strict assembly path (harness.run) keeps
-    every fuzzy/invalid feature blocking. Deferral never applies to the sole
-    candidate-essential annotation of its kind, so genuine coordinate
+    every fuzzy/invalid feature blocking. Deferral never applies to
+    candidate-essential topology/exclusion annotations, so genuine coordinate
     problems remain blocking. Deferred annotations are recorded, not dropped.
     """
     from .common import interval, sequence, sourced
@@ -469,8 +473,8 @@ def partition_features(protein):
         kind = f.get("kind", "unknown")
         essential = kind in CANDIDATE_ESSENTIAL_KINDS or (
             kind in {"chain", "gpi_attachment_site"} and protein.get("topology") in CHAIN_ESSENTIAL_TOPOLOGIES)
-        if essential and kind not in valid_kinds:
-            engine_input.append(f)  # sole essential annotation: must stay blocking
+        if essential and (kind in CANDIDATE_ESSENTIAL_KINDS or kind not in valid_kinds):
+            engine_input.append(f)  # an exact first exclusion cannot validate an uncertain second one
         else:
             deferred.append({"kind": kind, "name": f.get("name", ""), "start": f.get("start"),
                              "end": f.get("end"), "reason": "fuzzy/invalid/unsourced coordinates",
@@ -528,7 +532,19 @@ def _screen_entry(entry, protein, lab_rules, domain_policy):
         except ValueError:
             pass  # invalid sequence: the engine's blocking check handles it
     candidates, base_flags = propose(p, None)
+    for candidate in candidates:
+        candidate["annotation_support"] = annotation_support(p, candidate)
+        candidate["candidate_comparison"] = candidate_tradeoff(candidate)
+        candidate["receiver_review"] = receiver_review(candidate)
     record = recommend(p, candidates, base_flags, entry=entry, lab_rules=lab_rules)
+    for candidate in candidates:
+        individual = recommend(p, [candidate], base_flags, entry=entry, lab_rules=lab_rules)
+        candidate["screening_recommendation"] = individual["screening_recommendation"]
+        candidate["screening_reason_codes"] = individual["reason_codes"]
+        candidate["screening_rationale"] = individual["rationale"]
+    if p.get("excluded_annotations"):
+        record.setdefault("evidence", {})["excluded_annotations"] = p["excluded_annotations"]
+        record.setdefault("not_evaluated", []).append("Other isoform/processed-molecule annotations not transferred to this reference")
     if p.get("topology") == "multi_pass" and p.get("sequence"):
         # Multi-pass depth: enumerate every annotated extracellular loop with its
         # length and fully contained sourced domains; a loop containing a sourced
@@ -563,6 +579,6 @@ def _screen_entry(entry, protein, lab_rules, domain_policy):
         if "secondary_feature_annotation_deferred" not in record["reason_codes"]:
             record["reason_codes"].append("secondary_feature_annotation_deferred")
         record["missing_info"] = list(record.get("missing_info", [])) + [
-            "次要/备选注释坐标待审阅（不影响主候选，装配前必须解决）: "
+            "次要/备选注释坐标待审阅（未用于生成主候选，不表示影响已被排除）: "
             + ", ".join(f"{d['kind']}:{d.get('name') or ''}" for d in deferred)]
     return record, candidates

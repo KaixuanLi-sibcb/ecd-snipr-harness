@@ -252,7 +252,7 @@ class MultichainTests(unittest.TestCase):
         temp, result, records, candidates = screen_one(make_protein("P95001", subunit))
         rec = records[0]
         self.assertEqual(rec["screening_recommendation"], "conditional_candidate")
-        self.assertIn("multichain_partner_required", rec["reason_codes"])
+        self.assertIn("native_heteromer_context_requires_review", rec["reason_codes"])
         self.assertIn("heterodimer with PARTNERX", rec["rationale"])
         self.assertEqual(rec["evidence"]["multichain_partners"],
                          ["Forms a heterodimer with PARTNERX; stable at the surface."])
@@ -266,7 +266,7 @@ class MultichainTests(unittest.TestCase):
 
     def test_no_subunit_comment_no_flag(self):
         candidates, _ = propose(make_protein("P95003"))
-        self.assertNotIn("multichain_partner_required", codes(candidates[0]))
+        self.assertNotIn("native_heteromer_context_requires_review", codes(candidates[0]))
         self.assertEqual(candidates[0]["multichain_partners"], [])
 
 
