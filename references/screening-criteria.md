@@ -4,6 +4,15 @@
 
 Design review for **Antibody-Sender -> Antigen-Receiver**, not therapeutic target ranking or a universal receptor-function classifier. The candidate unit is `(reference sequence, isoform, antigen form, exact interval)`. Functional observations additionally require actual construct, sender/antibody and experimental conditions.
 
+## Two independent conclusions (v0.7.0)
+
+The four design classes remain unchanged. A positive fragment-design recommendation
+must be displayed together with receiver functional-risk state, never as a substitute.
+Unknown risk is not low risk; lack of experiment is not poor design. Existing sequence
+warnings and six context categories are organized into explicit review questions,
+not counted as high-risk votes or fitted to known failed targets. See the
+[receiver-function decision table](receiver-function-v070.md).
+
 ## Adopted, conditional and deferred
 
 | Criterion | Treatment | Reason / limitation |
@@ -107,6 +116,12 @@ For multi-pass references every annotated extracellular loop is enumerated indiv
 `PI_SUMMARY.md` carries a "checks applied" section listing exactly what the deterministic screen evaluated and what remains not evaluated (epitope literature, contextual-risk literature unless records are supplied, isoform sequence-level comparison, glycan occupancy, structure/folding/aggregation/cleavage prediction, the four experimental endpoints, laboratory isoform confirmation). `summary.json` adds `reason_code_tallies` with explicit denominators; per-code tallies need not sum to class counts because one reference can carry several codes.
 
 ## Scientific sources and boundaries
+
+### v0.5.1 biological-unit review
+
+[Antigen-unit review](antigen-units-v051.md) adds explicit processing-span, omitted mature-product and repeat-cut checks. These are conditional review signals, not measured processing or epitope loss. A repeated sequence unit is not automatically a folding domain. Repeat cuts join the transparent annotated-integrity selection axis; retaining the other candidate and its repertoire tradeoff remains mandatory.
+
+Intramembrane features are exclusion intervals for soluble fragments and remain distinct from full transmembrane spans. Fuzzy essential exclusions cannot be silently dropped. A single full TM with several external intervals can have a known orientation yet lack a supported continuous route; no interval joining is allowed. Named product-scoped localization never transfers to the full precursor. Missing epitope input is separate from an unperformed external epitope search.
 
 ### v0.4.2 audit qualifications
 

@@ -4,10 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ecd-snipr-harness"
-version = "0.5.0"
+version = "0.8.1"
 description = "Evidence-bounded antigen fragment design for SNIPR receivers"
 requires-python = ">=3.10"
 dependencies = []
+
+[project.optional-dependencies]
+sequence-tools = ["biopython==1.86"]
 
 [tool.setuptools]
 package-dir = {"" = "scripts"}

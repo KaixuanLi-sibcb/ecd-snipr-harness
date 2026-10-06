@@ -18,11 +18,17 @@ from ecd_snipr.common import file_hash, read_json
 from ecd_snipr.contracts import validate_project
 from ecd_snipr import __version__
 
-FORBIDDEN = {"local_data", "real_data_output", "smoke_test_output", "live_validation_output", "coverage_output", "private_output", "outputs", "cache", ".git", "__pycache__", ".pytest_cache", "dist", "backup"}
+FORBIDDEN = {"local_data", "real_data_output", "smoke_test_output", "live_validation_output", "coverage_output", "private_output", "lab_evidence_output", "outputs", "cache", ".git", "__pycache__", ".pytest_cache", "dist", "backup"}
+PRIVATE_ARTIFACTS = {"raw_inventory.json", "source_cells.tsv", "semantic_review_template.json", "assay_evidence.tsv",
+                     "fragment_reference_audit.tsv", "construct_link_candidates.tsv", "assay_definition_groups.tsv",
+                     "LAB_EVIDENCE_REPORT.md", "row_records.json", "receiver_function.tsv",
+                     "receiver_mechanism_review.tsv", "receiver_function_summary.json", "RECEIVER_FUNCTION.md",
+                     "source_link.json", "receiver_risk.tsv", "receiver_risk_signals.tsv", "receiver_risk_summary.json",
+                     "risk_policy_snapshot.json", "sequence_descriptors.json", "sequence_tools_summary.json"}
 
 
 def forbidden(path):
-    return any(p in FORBIDDEN or p.endswith(".egg-info") or p.startswith(("real_data_output", "smoke_test_output")) for p in path.parts) or path.suffix.lower() in {".xlsx", ".xls", ".zip", ".pyc", ".pem", ".key"} or path.name in {".DS_Store", ".env"}
+    return any(p in FORBIDDEN or p.endswith(".egg-info") or p.startswith(("real_data_output", "smoke_test_output")) for p in path.parts) or path.suffix.lower() in {".xlsx", ".xls", ".zip", ".pyc", ".pem", ".key"} or path.name in {".DS_Store", ".env"} | PRIVATE_ARTIFACTS
 
 
 def assets(root):

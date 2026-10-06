@@ -15,18 +15,18 @@ from .common import contains, interval, overlaps
 # defining. A coordinate problem in one of these is deferred/recorded, never a
 # blocking coordinate error (blocking is reserved for candidate-relevant kinds).
 INFORMATIONAL_KINDS = {"region", "motif", "glycosylation_site", "site", "binding_site",
-                       "active_site", "variant", "mutagenesis", "lipidation"}
+                       "active_site", "variant", "mutagenesis", "lipidation", "repeat"}
 
 # Kinds whose coordinates define or block candidates; prediction-grade evidence
 # on these is what prediction_requires_annotation_review is about.
 BOUNDARY_DEFINING_KINDS = {"extracellular", "cytoplasmic", "lumenal", "other_topology",
-                           "transmembrane", "signal_peptide", "chain", "propeptide",
+                           "transmembrane", "intramembrane", "signal_peptide", "chain", "propeptide",
                            "processed_peptide", "gpi_signal", "gpi_attachment_site"}
 PREDICTION_RELEVANT_KINDS = BOUNDARY_DEFINING_KINDS | {"domain", "disulfide"}
 
 # Anchor kinds considered when checking that a candidate boundary agrees with
 # the neighboring annotation (e.g. ECD start should abut the signal peptide).
-BOUNDARY_ANCHOR_KINDS = ("signal_peptide", "transmembrane", "propeptide", "gpi_signal", "chain")
+BOUNDARY_ANCHOR_KINDS = ("signal_peptide", "transmembrane", "intramembrane", "propeptide", "gpi_signal", "chain")
 
 SEQUON_RE = re.compile(r"(?=(N[^P][ST]))")
 

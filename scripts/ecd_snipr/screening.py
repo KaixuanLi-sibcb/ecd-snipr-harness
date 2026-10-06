@@ -19,6 +19,8 @@ from .common import digest, file_hash, now, read_json, sequence, tsv, write_json
 from .design import propose
 from .harness import CANDIDATE_COLUMNS, engine_hash, verify_bundle
 from .profile import enumerate_external_loops
+from .receiver_function import assess_receiver
+from .receiver_risk import assess_risk
 from .methodology import (SELECTION_AXES, annotation_support, candidate_tradeoff,
                           receiver_review, route_diagnostic, selection_key)
 
@@ -43,6 +45,9 @@ CONDITIONAL_CODES = {
     "multichain_partner_required",   # legacy imported records
     "native_heteromer_context_requires_review",
     "boundary_feature_conflict",     # candidate boundary disagrees with adjacent annotation
+    "processed_chain_segments_spanned",
+    "extracellular_processed_product_not_covered",
+    "repeat_cut_by_boundary",
 }
 
 # The engine raises the review-level risk `domain_cut` with the domain identity;
@@ -77,7 +82,7 @@ INSUFFICIENT_CODES = {
 # annotations (a shed-form chain on a type-I receptor, an alternative splice
 # chain, a fuzzy domain/disulfide/epitope) are deferred with an explicit
 # record instead of poisoning an otherwise exact candidate.
-CANDIDATE_ESSENTIAL_KINDS = {"extracellular", "transmembrane", "signal_peptide", "cytoplasmic", "gpi_signal", "propeptide"}
+CANDIDATE_ESSENTIAL_KINDS = {"extracellular", "transmembrane", "intramembrane", "signal_peptide", "cytoplasmic", "gpi_signal", "propeptide"}
 CHAIN_ESSENTIAL_TOPOLOGIES = {"secreted", "gpi"}
 
 CONTEXTUAL_KINDS = ("processing", "native_shedding", "junction_cleavage", "oligomerization", "aggregation", "culture_interference")
@@ -95,6 +100,9 @@ SCREENING_COLUMNS = [
     "lab_rules_status", "processing_status", "processing_error",
     "route_state", "next_action", "primary_annotation_support", "primary_candidate_comparison",
     "receiver_review_status",
+    "primary_antigen_context",
+    "recommendation_scope", "receiver_functional_risk", "receiver_endpoint_evidence",
+    "receiver_review_priority", "receiver_risk_reason_codes",
 ]
 
 
@@ -168,7 +176,7 @@ def pick_primary(candidates):
     for c in rest:
         c_key = selection_key(c)
         axis = next(i for i, (a, b) in enumerate(zip(primary_key, c_key)) if a != b)
-        reason = ["主候选避免了该备选的已注释结构域切割/跨边界二硫键",
+        reason = ["主候选避免了该备选的已注释结构单元切割（域/重复单元）或跨边界二硫键",
                   "主候选避免了该备选的已映射表位序列丢失（不代表识别已验证）",
                   "以上取舍相同时优先完整成熟抗原形式，保留探索表位范围",
                   "生物学取舍并列；candidate_id 仅用于可复现排序，不表示优劣"][axis]
@@ -227,13 +235,18 @@ def recommend(protein, candidates, base_flags, entry=None, lab_rules=None):
             lacking = ["gpi_mature_boundary_missing"]
     if lacking:
         record["screening_recommendation"] = "insufficient_evidence"
-        record["reason_codes"] = lacking
+        record["reason_codes"] = list(lacking)
         record["rationale"] = "身份、拓扑或关键边界等核心信息不足或相互冲突，无法提出可靠建议；这是证据状态，不是生物学失败"
-        record["missing_info"] = lacking
+        record["missing_info"] = list(lacking)
         return record
     primary, alternates = pick_primary(candidates)
     if primary is None:
         blocked_codes = sorted({r["code"] for c in candidates for r in c.get("risks", []) if r.get("severity") == "block"} | {c for c in base_codes})
+        if topology in {"type_i", "type_ii"} and sum(f.get("kind") == "extracellular" for f in protein.get("features", [])) > 1:
+            if any(f.get("kind") == "intramembrane" for f in protein.get("features", [])):
+                blocked_codes.append("intramembrane_segmented_route_requires_review")
+            else:
+                blocked_codes.append("segmented_single_pass_needs_product_specific_design")
         record["screening_recommendation"] = "no_standard_route"
         record["reason_codes"] = blocked_codes or ["no_supported_continuous_candidate"]
         record["rationale"] = ("在当前定义的候选路线（完整抗原形式 / 有来源的成熟链、GPI 成熟形式、shed 形式或结构域备选）"
@@ -254,6 +267,7 @@ def recommend(protein, candidates, base_flags, entry=None, lab_rules=None):
         "boundary_analysis": primary.get("boundary_analysis"),
         "molecular_profile": primary.get("molecular_profile"),
         "multichain_partners": primary.get("multichain_partners", []),
+        "antigen_context": primary.get("antigen_context", {}),
         "topology_basis": {"topology": topology, "location": protein.get("location", "unknown")},
         "reference": {"accession": protein.get("accession"), "isoform": protein.get("isoform"),
                       "evidence": protein.get("evidence", {}), "selection": protein.get("reference_selection"),
@@ -537,11 +551,14 @@ def _screen_entry(entry, protein, lab_rules, domain_policy):
         candidate["candidate_comparison"] = candidate_tradeoff(candidate)
         candidate["receiver_review"] = receiver_review(candidate)
     record = recommend(p, candidates, base_flags, entry=entry, lab_rules=lab_rules)
+    record["processed_products"] = p.get("processed_products", [])
     for candidate in candidates:
         individual = recommend(p, [candidate], base_flags, entry=entry, lab_rules=lab_rules)
         candidate["screening_recommendation"] = individual["screening_recommendation"]
         candidate["screening_reason_codes"] = individual["reason_codes"]
         candidate["screening_rationale"] = individual["rationale"]
+        candidate["receiver_function"] = assess_receiver(candidate)
+        candidate["receiver_risk"] = assess_risk(candidate, p)
     if p.get("excluded_annotations"):
         record.setdefault("evidence", {})["excluded_annotations"] = p["excluded_annotations"]
         record.setdefault("not_evaluated", []).append("Other isoform/processed-molecule annotations not transferred to this reference")

@@ -25,13 +25,38 @@ When the actual scaffold is not yet supplied, read the [source-checked public re
 8. Lead reports with research conclusions and coverage with explicit denominators — not approval counts. Label outputs 候选设计覆盖/初筛建议, never experimental success rates; label small runs pilot.
 
 ## Execution
+Read [receiver risk v0.8.0](references/receiver-risk-v080.md). Every new `screen` and
+`run` includes an independent mechanism-priority layer, with source and scope checks.
+Use `receiver-risk` plus the exact reference set for immutable historical overlays.
+Use `sequence-tools` for local descriptors and optional Biopython; normalized local
+IUPred/DeepTMHMM/SignalP predictions require fragment identity, hash, coordinates,
+version, parameters and actual raw output file. Never call an unavailable tool checked.
+Do not turn native shedding/dimerization or generic glycosylation into measured
+SNIPR self-activation. Missing context never establishes low risk. Do not tune rules
+or sequence cutoffs against a supplied failure list. Report whole-cohort flag
+prevalence alongside retrospective matches; absent eligible successes means no
+accuracy/specificity estimate. This is risk-priority triage, not a validated predictor.
+
+Read the [v0.7.0 receiver-function policy](references/receiver-function-v070.md).
+Always present fragment design and receiver function as separate axes. `standard_candidate`
+does not imply low basal activation; `conditional_candidate` is not a failure prediction.
+Export the four endpoint evidence states, scope and next actions; unknown risk remains
+`undetermined_not_low_risk`, even when no warning is found. Never add gene-specific rules
+from a failure list or report generic review flags as successful failure predictions.
+Native protein biology cannot establish function of a new receiver. Never transfer outcomes
+between antigen-only matches or scaffold versions. Use `receiver-audit --run-dir RUN --outdir NEW`
+to overlay a verified historical bundle without changing its design results.
+
+Read [antigen-unit scope](references/antigen-units-v051.md) before interpreting a fragment as representative of a gene. Review product-specific omissions, spans across annotated processed chains and cut repeats. A full topological ECD is not a complete mature-product/epitope repertoire. Missing epitope mappings mean none were supplied, not that an external search was negative. v0.5.1 keeps the candidate generator intact; unsupported segmented mature-product routes remain explicit gaps, not guessed concatenations.
+
 For current selection and evidence semantics read [methodology v0.5.0](references/methodology-v050.md). Keep design class separate from annotation support; never upgrade feature evidence using entry reviewed status. Explain primary/alternate repertoire tradeoffs, route gaps and receiver review questions. The pending stratified review queue is a purposive audit aid, not a biological accuracy sample or assembly approval.
 
 Use `python3 scripts/ecd_snipr_cli.py --help`. Core and offline tests require Python >=3.10, no external packages. Always use a private output directory outside the installed skill.
 
 - `screen --list targets.tsv --cache CACHE --outdir OUT [--pilot] [--resume]` chains build-set -> normalize -> screening -> summary. `build-set --query` builds from a public UniProt query; `screen --set SETDIR` screens a previously built set.
 - `run --resume` (legacy project branch) reuses only hash-verified bundles and preserves corrupted/failed attempts. Incomplete acquisition or processing is marked `partial` and reported as such, never as a full run (CLI exit code 3).
-- Use `inspect` and `map` for workbook intake, `normalize-uniprot` for local public annotations, and optional `fetch-uniprot` only for explicitly public accessions. Never upload private workbook contents, scaffold sequences or unpublished constructs to prediction services without specific authorization.
+- Use `lab-evidence` for workbook recovery and reconciliation; read the [private evidence contract](references/lab-evidence-v060.md). Raw intake needs no actual scaffold. Preserve duplicate headers/unknown cells; quarantine suspect layouts and count source rows separately from constructs. Proposed gene/fragment links never confirm receiver identity. Cell-specific semantics plus audited constructs gate quantitative interpretation only. `inspect` and `map` remain low-level helpers.
+- Use `normalize-uniprot` for local public annotations, and optional `fetch-uniprot` only for explicitly public accessions. Never upload private workbook contents, scaffold sequences or unpublished constructs to prediction services without specific authorization.
 - Lab experience rules import via `--lab-rules` with provenance; when absent, outputs state 尚未纳入.
 
 Before reporting completion run `make all-checks-offline` in the source package and `verify-run` for produced bundles. DNA synthesis orders, publishing and model training are separate actions, not implied by this skill.

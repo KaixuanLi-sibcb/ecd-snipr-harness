@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cell-scoped laboratory measurement definitions, not functional approval",
+  "type": "object",
+  "required": ["schema_version", "source_sha256", "reviews"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "source_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "reviews": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["cell_id", "raw_record_digest", "decision"],
+        "properties": {
+          "cell_id": {"type": "string", "minLength": 1},
+          "raw_record_digest": {"type": "string", "minLength": 1},
+          "decision": {"enum": ["pending", "confirmed"]},
+          "reviewer": {"type": "string"},
+          "reviewed_at": {"type": "string"},
+          "rationale": {"type": "string"},
+          "formula_cache_reviewed": {"type": "boolean"},
+          "sequence_formula_cache_reviewed": {"type": "boolean"},
+          "source_ref": {"type": "object"},
+          "field": {"type": "string"},
+          "raw_value": {},
+          "definition": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "endpoint": {"enum": ["surface_expression", "recognition_retention", "basal_activation", "induced_response", "unconfirmed"]},
+              "unit": {"type": "string"}, "denominator": {"type": "string"}, "statistic": {"type": "string"},
+              "gate_path": {"type": "string"}, "channel": {"type": "string"}, "construct_id": {"type": "string"},
+              "context": {"type": "object"}
+            }
+          }
+        },
+        "allOf": [{"if": {"properties": {"decision": {"const": "confirmed"}}},
+                   "then": {"required": ["reviewer", "reviewed_at", "rationale", "definition"],
+                            "properties": {"reviewer": {"minLength": 1}, "reviewed_at": {"minLength": 1}, "rationale": {"minLength": 1},
+                                           "definition": {"required": ["endpoint"], "properties": {"endpoint": {"not": {"const": "unconfirmed"}}}}}}}]
+      }
+    }
+  }
+}

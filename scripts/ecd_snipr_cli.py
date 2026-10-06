@@ -9,8 +9,11 @@ from ecd_snipr.acquisition import DEFAULT_SET_QUERY, build_set, read_target_list
 from ecd_snipr.common import now, read_json, write_json
 from ecd_snipr.harness import run, verify_bundle
 from ecd_snipr.ingest import inventory, map_rows
+from ecd_snipr.lab_pipeline import run_lab_intake
 from ecd_snipr.screening import run_screening
 from ecd_snipr.uniprot import fetch, normalize
+from ecd_snipr.receiver_function import audit_run
+from ecd_snipr.receiver_risk import audit_risk, run_sequence_tools
 
 
 def new_output(path, value):
@@ -20,7 +23,7 @@ def new_output(path, value):
 
 
 def parser():
-    p = argparse.ArgumentParser(description="Traceable antigen-ECD -> lab SNIPR receiver candidate design. No success prediction.")
+    p = argparse.ArgumentParser(description="Traceable antigen-ECD -> lab SNIPR receiver candidate design, with mature-product/repertoire review. No success prediction.")
     commands = p.add_subparsers(dest="command", required=True)
     for name in ("run", "smoke"):
         sub = commands.add_parser(name, help="Offline synthetic fixture pipeline" if name == "smoke" else "Execute a normalized project")
@@ -36,6 +39,24 @@ def parser():
     sub.add_argument("--inventory", required=True)
     sub.add_argument("--mapping", required=True)
     sub.add_argument("--output", required=True)
+    sub = commands.add_parser("lab-evidence", help="Offline lossless workbook recovery, fragment/reference audit and four-endpoint readiness; no functional labels")
+    sub.add_argument("--input", required=True, help="Read-only private XLSX/CSV/TSV; never uploaded")
+    sub.add_argument("--outdir", required=True, help="Private output root outside the repository; immutable bundles")
+    sub.add_argument("--layout", help="Optional workbook-hash-bound explicit column/row-region map")
+    sub.add_argument("--semantics", help="Optional human-authored, cell-hash-bound endpoint definitions")
+    sub.add_argument("--reference-set", help="Existing build-set directory; offline exact fragment matching only")
+    sub.add_argument("--construct-run", help="Verified legacy run bundle containing construct_audit.json")
+    sub.add_argument("--resume", action="store_true")
+    sub = commands.add_parser("receiver-risk", help="Name-blind mechanism-priority overlay using exact public reference annotations; no failure labels or success probabilities")
+    sub.add_argument("--run-dir", required=True)
+    sub.add_argument("--reference-set", required=True)
+    sub.add_argument("--outdir", required=True)
+    sub.add_argument("--tool-evidence", help="Optional normalized, hash-bound local IUPred/DeepTMHMM/SignalP predictions JSON list")
+    sub.add_argument("--resume", action="store_true")
+    sub = commands.add_parser("sequence-tools", help="Run local hydropathy/composition descriptors and optional Biopython cross-check; never upload sequences")
+    sub.add_argument("--run-dir", required=True)
+    sub.add_argument("--outdir", required=True, help="New directory outside original run; never overwrite")
+    sub.add_argument("--biopython", action="store_true", help="Optional extra; record not_available rather than pretend execution if absent")
     sub = commands.add_parser("normalize-uniprot", help="Import an existing UniProt JSON; does not choose the experimental isoform")
     sub.add_argument("--input", required=True)
     sub.add_argument("--output", required=True)
@@ -50,6 +71,10 @@ def parser():
     sub.add_argument("--output", required=True)
     sub = commands.add_parser("verify-run", help="Check every artifact checksum")
     sub.add_argument("--run-dir", required=True)
+    sub = commands.add_parser("receiver-audit", help="Read a verified run and export independent receiver-function evidence; no rescreening or gene-specific failure rules")
+    sub.add_argument("--run-dir", required=True, help="Existing hash-verified run; left unchanged")
+    sub.add_argument("--outdir", required=True, help="New output root outside the original run")
+    sub.add_argument("--resume", action="store_true")
     sub = commands.add_parser("build-set", help="Build a membrane-protein analysis set from a target list or a public UniProt query")
     source = sub.add_mutually_exclusive_group(required=True)
     source.add_argument("--list", help="User target list (TSV/CSV/TXT): accessions or gene names; every row preserved")
@@ -103,6 +128,11 @@ def main(argv=None):
         result = map_rows(read_json(args.inventory), read_json(args.mapping))
         new_output(args.output, result)
         print(json.dumps({"mapped_rows": len(result), "status": "uninterpreted"}))
+    elif args.command == "lab-evidence":
+        result = run_lab_intake(args.input, args.outdir, layout_path=args.layout, semantics_path=args.semantics,
+                                reference_set=args.reference_set, construct_run=args.construct_run, resume=args.resume)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result["summary"]["execution_completeness"] == "complete" else 3
     elif args.command == "normalize-uniprot":
         new_output(args.output, normalize(read_json(args.input)))
         print("Imported; confirm actual isoform and source coordinates before design")
@@ -119,6 +149,14 @@ def main(argv=None):
         reviews = [{"review_key": c["review_key"], "candidate_id": c["candidate_id"], "decision": "pending", "reviewer": "", "reviewed_at": "", "rationale": "", "acknowledged_risks": [], "required_risks": sorted({f["code"] for f in c["risks"] if f["severity"] == "review"})} for c in read_json(Path(args.run_dir) / "candidates.json") if c["review_key"]]
         new_output(args.output, reviews)
         print("Pending review template only; authorized reviewer must fill decision and risk acknowledgements")
+    elif args.command == "receiver-audit":
+        print(json.dumps(audit_run(args.run_dir, args.outdir, args.resume), ensure_ascii=False, indent=2))
+    elif args.command == "receiver-risk":
+        result = audit_risk(args.run_dir, args.reference_set, args.outdir, args.tool_evidence, args.resume)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result['summary']['completeness'] == 'complete' else 3
+    elif args.command == "sequence-tools":
+        print(json.dumps(run_sequence_tools(args.run_dir, args.outdir, args.biopython), ensure_ascii=False, indent=2))
     elif args.command == "verify-run":
         verified = verify_bundle(args.run_dir)
         print(json.dumps({"verified": verified, "checked_at": now()}))

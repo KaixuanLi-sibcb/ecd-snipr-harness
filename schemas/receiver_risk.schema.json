@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Receiver mechanism-priority assessment (not functional prediction)",
+  "type": "object",
+  "required": ["review_priority", "assessment_status", "reason_codes", "signals", "functional_confidence", "functional_risk", "policy_sha256", "success_probability", "missing_information"],
+  "properties": {
+    "review_priority": {"enum": ["elevated_review_priority", "context_dependent_review", "sequence_alert_only", "no_specific_signal_detected", "not_assessed"]},
+    "assessment_status": {"type": "string"},
+    "reason_codes": {"type": "array", "items": {"type": "string"}},
+    "signals": {"type": "array", "items": {"type": "object", "required": ["code", "priority", "endpoints_to_check", "evidence", "interpretation", "next_action", "receiver_outcome_inference"]}},
+    "functional_confidence": {"const": "not_established"},
+    "functional_risk": {"const": "undetermined_not_low_risk"},
+    "policy_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "success_probability": {"type": "null"},
+    "missing_information": {"type": "array", "items": {"type": "string"}}
+  }
+}

@@ -1,5 +1,54 @@
 # Data contracts
 
+## Receiver risk and optional software evidence (v0.8.0)
+
+`receiver_risk` is independent of `screening_recommendation`, `assembly_status`
+and four endpoint measurement states. Its review priority is not a validated
+functional risk category. Native annotation sources, excluded/unresolved text,
+retained coordinates, computed descriptors and absent receiver context stay explicit.
+See [the rule and predictor input contract](receiver-risk-v080.md).
+
+Local predictor records require the exact fragment ID, plain-sequence SHA256,
+software/version, parameters, source and hash-verified raw output file. Canonical
+full-protein coordinates are not fragment coordinates. No private sequences are
+uploaded by this workflow; normalized imports remain predictions, not outcomes.
+
+## v0.7.0 receiver-function additions
+
+No input fields are removed and EvidenceRecord v2 is unchanged. Each candidate adds
+`receiver_function`, conforming to [the output schema](../schemas/receiver_function.schema.json).
+Batch records add `recommendation_scope`, `receiver_functional_risk` and
+`receiver_endpoint_evidence`. These fields do not change primary selection or design class.
+
+`receiver_function.tsv` has four rows per candidate, including blocked candidate stubs;
+summary endpoint counts use usable candidates only and explicitly name that denominator.
+`receiver_mechanism_review.tsv` has six review-axis rows per candidate. A review signal is
+not a prediction or an observed outcome. A missing or out-of-fragment context record stays
+visible but cannot become a positive signal. Native versus receiver evidence scope is retained.
+
+Same-fragment evidence alone is `related_or_unresolved_only`. `measured_in_recorded_context`
+requires exact full fusion, scaffold ID/version, consistent construct audit and eligible
+endpoint definition from the existing observation normalizer. No gene-level label transfer.
+Exact context keys include construct, endpoint, all supplied context fields, normalized unit,
+gate, channel, denominator and statistic. Conflicting values under one key are retained;
+different batches/replicates/contexts are never averaged or relabeled as conflicts.
+
+`functional_risk=undetermined_not_low_risk` and `success_probability=null` remain even when
+measurements exist: an acceptance protocol and independent validation are not implemented.
+See [policy and limitations](receiver-function-v070.md). This is intentionally not an
+automatic pass/fail label importer.
+
+## v0.6.0 private evidence additions
+
+See the [laboratory contract](lab-evidence-v060.md) for source-hash-bound layout
+regions, cell-bound semantic reviews, output schemas and count units. These are
+additive optional inputs; public screening and actual assembly contracts remain.
+Source cells, fragment strings, possible identity edges and full audited constructs
+are different entities. Raw XLSX EvidenceRecord v2 values confirm cell presence only;
+CSV/TSV and computed matches retain native provenance rather than a false XLSX or
+biological confirmation. Actual sequence conflicts cannot be overridden by a semantic
+review. Public reference matches never confirm the laboratory isoform.
+
 ## v0.5.0 screening additions
 
 No existing project-input fields are removed. Batch candidates add `annotation_support` (reference/boundary/topology/overlapping-domain provenance), `candidate_comparison` (integrity disruptions, mapped epitope status/loss, retained/cut/omitted domains, explicit selection tuple) and `receiver_review` (planning-only checks, four not_measured endpoints). Invalid candidate stubs remain blocked and may have missing support. Source ECO records are preserved, unmapped codes remain unclassified.
@@ -95,3 +144,8 @@ Imported legacy v2 records are validated and exported without modification; extr
 New computations use `claims.jsonl` with `evidence_class=deterministic_rule`, `status=computed`. **They are intentionally not coerced into legacy confirmed_fixture/confirmed_live statuses.** The old v2 enum has no honest generic local-computation status. New claims carry native context and checksums; legacy context linkage remains unresolved unless a later explicit mapping supplies it. This is backward-compatible consumption, not a silent v2 schema extension.
 
 Hashes labelled `reference_sha256`, `claim_id`, `review_key`, and run keys use canonical JSON serialization (including string quotes); source-file and artifact hashes use raw bytes. The algorithm and encoding are stable and recorded in code. Do not compare hashes from different conventions as if identical.
+## v0.5.1 additive antigen-unit fields
+
+Normalized `processed_products` links exact uniquely named reference Chain intervals to matching product-scoped location comments, retaining source/version/ECO and original comments. This must not change whole-reference localization. Candidate `antigen_context` records processing spans, unrepresented sourced extracellular products and repeat-boundary coverage; it generates review questions, never a new sequence. `full_ecd` is scoped to a topological interval, not a gene-wide mature-product/epitope repertoire. `antigen_context.tsv` and `processed_product_review.tsv` are machine-readable exports covered by the immutable manifest. Absence of epitope mappings means no mappings supplied; external epitope search is separately `not_performed`.
+
+Normalized `intramembrane` is distinct from `transmembrane`: it is an essential exclusion feature for soluble fragments, not another full membrane span. Candidate context retains `reference_intramembrane_segments`. Uncertain coordinates cannot be dropped as informational annotations. Exact excluded intervals cannot appear in an unblocked fragment.

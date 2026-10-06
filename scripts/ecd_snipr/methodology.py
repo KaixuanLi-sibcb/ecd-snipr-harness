@@ -7,7 +7,7 @@ confidence or functional probabilities. Unknown ECO codes remain unclassified.
 from collections import Counter
 from .common import digest
 
-METHOD_VERSION = "1.0"
+METHOD_VERSION = "1.1"
 ECO_CLASSES = {
     "ECO:0000269": "experimental_annotation",
     "ECO:0000305": "curator_inference",
@@ -62,7 +62,7 @@ def annotation_support(protein, candidate):
         "reference": evidence_support(protein.get("evidence")),
         "boundary": evidence_support(candidate.get("boundary_evidence")),
         "topology": [_feature_record(f) for f in fs if f.get("kind") in
-                     {"extracellular", "transmembrane", "gpi_attachment_site", "signal_peptide", "chain"}],
+                     {"extracellular", "transmembrane", "intramembrane", "gpi_attachment_site", "signal_peptide", "chain"}],
         "overlapping_domains": [_feature_record(f) for f in relevant_domains],
         "domain_coverage_status": "annotations_present" if relevant_domains else "not_assessed_no_overlapping_annotation",
         "reviewed_entry_is_experimental_proof": False,
@@ -74,7 +74,7 @@ def candidate_tradeoff(candidate):
     risks = {r["code"] for r in candidate.get("risks", [])}
     ep = candidate.get("epitope_review", [])
     loss = [e for e in ep if e.get("state") != "sequence_retained_not_binding_proven"]
-    integrity = sorted(risks & {"domain_cut", "disulfide_partner_removed"})
+    integrity = sorted(risks & {"domain_cut", "disulfide_partner_removed", "repeat_cut_by_boundary"})
     return {
         "integrity_disruptions": integrity,
         "mapped_epitope_status": "loss_or_partial_loss" if loss else "sequence_retained_not_binding_proven" if ep else "unknown",
@@ -82,6 +82,7 @@ def candidate_tradeoff(candidate):
         "domains_retained": candidate.get("domains_retained", []),
         "domains_cut": candidate.get("domains_cut", []),
         "domains_omitted": candidate.get("domains_omitted", []),
+        "antigen_context": candidate.get("antigen_context", {}),
         "disulfide_crossings": (candidate.get("molecular_profile") or {}).get("disulfides_partial", []),
         "repertoire_statement": "Omitted domains/epitopes narrow the tested antigen repertoire; unknown epitopes remain unknown",
         "selection_axes": SELECTION_AXES,
@@ -104,7 +105,7 @@ def receiver_review(candidate):
         ("attachment_geometry", "requires_review", "If the antigen slot is N-terminal to receiver TM, attachment is at the fragment C terminus; verify native orientation and steric accessibility", ["type_ii_attachment_orientation_change"] if topology == "type_ii" else []),
         ("recognition_repertoire", "requires_review", "Compare retained/omitted domains and mapped epitopes; sequence retention does not establish binding or new-antibody repertoire", sorted(codes & {"known_epitope_loss", "domain_cut", "domain_omitted_epitope_scope_changed", "epitope_coverage_unknown"})),
         ("folding_and_partners", "requires_review", "Review domain boundaries, disulfide crossings and native complex context without assuming obligatory partner dependence", sorted(codes & {"disulfide_partner_removed", "domain_cut", "native_heteromer_context_requires_review"})),
-        ("processing_and_junctions", "not_evaluated", "Native processing/shedding annotations do not establish cleavage of a new fusion; assess actual junction sequence and cell context", sorted(codes & {"gpi_anchor_replaced", "multiple_processed_chains_dependency_unknown", "shed_product_tethering_unvalidated"})),
+        ("processing_and_junctions", "not_evaluated", "Native processing/shedding annotations do not establish cleavage of a new fusion; assess actual junction sequence and cell context", sorted(codes & {"gpi_anchor_replaced", "multiple_processed_chains_dependency_unknown", "shed_product_tethering_unvalidated", "processed_chain_segments_spanned", "extracellular_processed_product_not_covered"})),
     ]
     return {"configuration": "antibody_sender_antigen_receiver",
             "status": "planning_only_scaffold_unverified",
@@ -155,7 +156,9 @@ def review_queue(records, candidates, per_stratum=2):
         tradeoff = c.get("candidate_comparison", {})
         stratum = [r.get("scope_status"), r.get("topology"), r.get("screening_recommendation"),
                    r.get("route_diagnostic", {}).get("state"), support, tradeoff.get("integrity_disruptions", []),
-                   tradeoff.get("mapped_epitope_status", "not_available")]
+                   tradeoff.get("mapped_epitope_status", "not_available"),
+                   sorted({risk["code"] for risk in c.get("risks", [])} &
+                          {"processed_chain_segments_spanned", "extracellular_processed_product_not_covered"})]
         grouped.setdefault(digest(stratum), {"stratum": stratum, "records": []})["records"].append(r)
     rows = []
     for key, group in sorted(grouped.items()):
@@ -181,4 +184,7 @@ def methodology_summary(records, candidates):
             "primary_with_integrity_disruption": sum(bool(c["candidate_comparison"]["integrity_disruptions"]) for c in primary),
             "primary_with_mapped_epitope_loss": sum(bool(c["candidate_comparison"]["mapped_epitope_losses"]) for c in primary),
             "primary_with_unknown_epitopes": sum(c["candidate_comparison"]["mapped_epitope_status"] == "unknown" for c in primary),
+            "primary_with_processing_or_repertoire_flags": sum(any(r["code"] in {"processed_chain_segments_spanned", "extracellular_processed_product_not_covered"} for r in c.get("risks", [])) for c in primary),
+            "primary_with_repeat_cut": sum(any(r["code"] == "repeat_cut_by_boundary" for r in c.get("risks", [])) for c in primary),
+            "epitope_source_limit": "Unknown means no mapped annotations supplied to this run; no external epitope database was queried",
             "validation_status": "computational_only_not_biologically_validated"}

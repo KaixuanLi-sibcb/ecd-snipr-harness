@@ -35,6 +35,12 @@ def inventory(path):
             target = relations[sheet.attrib[REL]]
             target = target.lstrip("/") if target.startswith("/") else posixpath.normpath("xl/" + target)
             tree = ET.fromstring(archive.read(target))
+            shared = {}
+            for cell in tree.findall("s:sheetData/s:row/s:c", NS):
+                formula = cell.find("s:f", NS)
+                if formula is not None and formula.get("t") == "shared" and formula.text:
+                    shared.setdefault(formula.get("si"), []).append({"coordinate": cell.get("r"),
+                        "formula": formula.text, "attributes": dict(formula.attrib)})
             rows = []
             for r in tree.findall("s:sheetData/s:row", NS):
                 cells = []
@@ -48,6 +54,9 @@ def inventory(path):
                         value = "".join(n.text or "" for n in cell.findall(".//s:t", NS))
                     cells.append({"coordinate": cell.attrib["r"], "value": value,
                                   "formula": f.text if f is not None else None,
+                                  "formula_present": f is not None,
+                                  "formula_attributes": dict(f.attrib) if f is not None else {},
+                                  "shared_formula_anchors": shared.get(f.get("si"), []) if f is not None and f.get("t") == "shared" else [],
                                   "cell_type": cell.get("t", "n"), "style_index": cell.get("s", "")})
                 rows.append({"row": int(r.attrib["r"]), "cells": cells})
             result["sheets"].append({"name": sheet.attrib["name"], "rows": rows,

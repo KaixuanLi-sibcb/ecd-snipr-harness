@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Receiver-function evidence assessment v1",
+  "type": "object",
+  "required": ["policy_version", "scope", "functional_risk", "functional_compatibility", "endpoints", "mechanism_review", "success_probability", "calibration"],
+  "properties": {
+    "policy_version": {"const": "1.0"},
+    "scope": {"const": "candidate_x_receiver_x_assay_context"},
+    "functional_risk": {"const": "undetermined_not_low_risk"},
+    "functional_compatibility": {"const": "not_established"},
+    "success_probability": {"type": "null"},
+    "calibration": {"const": "not_performed"},
+    "mechanism_review": {"type": "array", "minItems": 6, "maxItems": 6},
+    "endpoints": {
+      "type": "object",
+      "required": ["surface_expression", "recognition_retention", "basal_activation", "induced_response"],
+      "additionalProperties": false,
+      "properties": {
+        "surface_expression": {"$ref": "#/$defs/endpoint"},
+        "recognition_retention": {"$ref": "#/$defs/endpoint"},
+        "basal_activation": {"$ref": "#/$defs/endpoint"},
+        "induced_response": {"$ref": "#/$defs/endpoint"}
+      }
+    }
+  },
+  "$defs": {
+    "endpoint": {
+      "type": "object",
+      "required": ["evidence_state", "functional_risk", "measurement_count", "measurement_contexts", "exact_measurements", "related_or_unresolved_records", "missing_information", "next_action"],
+      "properties": {
+        "evidence_state": {"enum": ["not_measured", "related_or_unresolved_only", "measured_in_recorded_context", "conflicting_measurements"]},
+        "functional_risk": {"const": "undetermined_not_low_risk"},
+        "measurement_count": {"type": "integer", "minimum": 0},
+        "measurement_contexts": {"type": "array"},
+        "exact_measurements": {"type": "array"},
+        "related_or_unresolved_records": {"type": "array"},
+        "missing_information": {"type": "array", "items": {"type": "string"}},
+        "next_action": {"type": "string"}
+      }
+    }
+  }
+}

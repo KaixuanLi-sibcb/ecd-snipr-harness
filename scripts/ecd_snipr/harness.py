@@ -8,8 +8,10 @@ from .contracts import validate_artifacts, validate_project
 from .design import audit_construct, propose
 from .observations import assay_summary, normalize_observation
 from .provenance import claims_for
+from .receiver_function import assess_receiver, export_receiver_function
+from .receiver_risk import assess_risk, export_risk
 
-CANDIDATE_COLUMNS = ["candidate_id", "protein_id", "gene", "accession", "isoform", "topology", "antigen_form_type", "start", "end", "length", "design_status", "assembly_status", "risk_review_status", "rationale", "domains_retained", "domains_cut", "domains_omitted", "epitope_review", "risks", "scaffold_issues", "existing_construct_matches", "review_key", "synthetic_only"]
+CANDIDATE_COLUMNS = ["candidate_id", "protein_id", "gene", "accession", "isoform", "topology", "antigen_form_type", "start", "end", "length", "design_status", "assembly_status", "risk_review_status", "rationale", "domains_retained", "domains_cut", "domains_omitted", "epitope_review", "risks", "scaffold_issues", "existing_construct_matches", "review_key", "synthetic_only", "receiver_function"]
 
 
 def engine_hash():
@@ -75,6 +77,8 @@ def run(project, outdir, resume=False):
                 if (old.get("protein_id"), old.get("start"), old.get("end"), old.get("antigen_sequence")) == (c["protein_id"], c.get("start"), c.get("end"), c["sequence"]):
                     exact = bool(c["fusion_sequence"] and c["fusion_sequence"] == old.get("fusion_sequence") and c.get("scaffold_id") == old.get("scaffold_id") and c.get("scaffold_version") == old.get("scaffold_version"))
                     c["existing_construct_matches"].append({"construct_id": old["construct_id"], "scope": "full_fusion_exact" if exact else "antigen_only_not_equivalent_receptor", "audit_status": old["audit_status"], "observation_ids": [o["observation_id"] for o in observations if o.get("construct_id") == old["construct_id"]]})
+            c["receiver_function"] = assess_receiver(c, observations, constructs)
+            c["receiver_risk"] = assess_risk(c, proteins.get(c["protein_id"]))
         event("experiment_linkage", "complete", observations=len(observations))
         claims, links, conflicts = claims_for(project, candidates, diagnostics, observations)
         validate_artifacts(candidates, observations)
@@ -86,6 +90,8 @@ def run(project, outdir, resume=False):
                    "functional_success_probability": "not_computed", "conflicts": len(conflicts),
                    "assay_summary": assay_summary(observations, constructs),
                    "interpretation": "Computational workflow completed; does not mean a construct functions in SNIPR."}
+        summary["receiver_function"] = export_receiver_function(run_dir, candidates)
+        summary["receiver_risk"] = export_risk(run_dir, candidates)
         for name, value in (("candidates", candidates), ("protein_diagnostics", diagnostics), ("construct_audit", list(constructs.values())), ("observations", observations), ("summary", summary), ("conflicts", conflicts), ("evidence_links", links)):
             write_json(run_dir / (name + ".json"), value)
         tsv(run_dir / "candidate_plan.tsv", candidates, CANDIDATE_COLUMNS)
@@ -118,7 +124,8 @@ def run(project, outdir, resume=False):
 def report(summary, candidates, diagnostics):
     lines = ["# Antigen-Receiver candidate review", "", "Configuration: Antibody-Sender -> Antigen-Receiver.", "", 
              f"Proteins: {summary['proteins']}; candidates: {summary['candidates']}; reviewed fusion sequences: {summary['fusion_sequences']}.",
-             "", "These are proposed constructs, not a functional success ranking. Empty fusion FASTA is intentional when scaffold/review is missing.", "",
+             "", "These are proposed constructs, not a functional success ranking. Empty fusion FASTA is intentional when scaffold/review is missing.",
+             "Receiver functional risk is undetermined, not low risk. See receiver_function.tsv for four endpoint evidence states and RECEIVER_FUNCTION.md for interpretation.", "",
              "## Decisions", "", "| Protein | Candidate | Range | Design | Assembly | Review reasons |", "|---|---|---|---|---|---|"]
     for c in candidates:
         codes = ", ".join(sorted({r["code"] for r in c["risks"] + c["scaffold_issues"]}))

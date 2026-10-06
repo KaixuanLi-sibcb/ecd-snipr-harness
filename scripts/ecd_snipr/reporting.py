@@ -12,8 +12,10 @@ from .common import now, tsv, write_json
 from .harness import CANDIDATE_COLUMNS
 from .screening import SCREENING_COLUMNS, CLASSES
 from .methodology import methodology_summary, review_queue
+from .receiver_function import assess_receiver, export_receiver_function
+from .receiver_risk import export_risk
 
-CANDIDATE_TSV_COLUMNS = CANDIDATE_COLUMNS + ["screening_recommendation", "screening_reason_codes", "screening_rationale", "protein_screening_recommendation", "is_primary", "junction_notes", "annotation_support", "candidate_comparison", "receiver_review"]
+CANDIDATE_TSV_COLUMNS = CANDIDATE_COLUMNS + ["screening_recommendation", "screening_reason_codes", "screening_rationale", "protein_screening_recommendation", "is_primary", "junction_notes", "annotation_support", "candidate_comparison", "receiver_review", "antigen_context"]
 
 TOPOLOGY_ORDER = ["type_i", "type_ii", "gpi", "multi_pass", "secreted", "intracellular", "unknown"]
 
@@ -87,6 +89,12 @@ def _rows_for_screening(records, entries, candidates):
             "primary_annotation_support": p.get("annotation_support", {}),
             "primary_candidate_comparison": p.get("candidate_comparison", {}),
             "receiver_review_status": p.get("receiver_review", {}).get("status", "not_assessed_no_primary"),
+            "primary_antigen_context": p.get("antigen_context", {}),
+            "recommendation_scope": "fragment_design_only_not_receiver_function",
+            "receiver_functional_risk": p.get("receiver_function", {}).get("functional_risk", "not_assessed_no_primary"),
+            "receiver_endpoint_evidence": {k: v["evidence_state"] for k, v in p.get("receiver_function", {}).get("endpoints", {}).items()},
+            "receiver_review_priority": p.get("receiver_risk", {}).get("review_priority", "not_assessed_no_primary"),
+            "receiver_risk_reason_codes": p.get("receiver_risk", {}).get("reason_codes", []),
         })
     return rows
 
@@ -204,12 +212,13 @@ def checks_applied_section(records):
     status where it depends on the run (lab rules, contextual records)."""
     evaluated = [
         "序列有效性、坐标精确性（1-based inclusive 在参考序列内）",
-        "原生 SP/TM/胞内尾/propeptide/GPI 信号残留（阻断级）",
+        "原生 SP/TM/Intramembrane/胞内尾/propeptide/GPI 信号残留（阻断级；膜内嵌入不当作额外全跨膜段）",
         "拓扑方向一致性（I 型/II 型/多跨膜/分泌冲突检测）",
         "成熟链边界（分泌链、GPI ω 残基与成熟边界）",
+        "跨不同加工链区段、未覆盖的已定位胞外成熟产物、重复单元切割（来源支持的核验问题，不等于实验后果）",
         "候选边界精度：逐边界列出定义性注释，并与相邻 SIGNAL/TM/PROPEP 注释核对（一致/容差间隙/冲突均显式记录）",
         "结构域：完整保留 / 被候选边界切割（含结构域身份与切割侧）/ 域外省略",
-        "二硫键完整包含或部分保留（跨边界的断键）",
+        "已注释二硫键两侧位置完整包含或仅保留一侧（不是实测断键）",
         "半胱氨酸计数与奇偶性（潜在游离巯基，审阅级提醒）",
         "N-糖基化 sequon 扫描（N-X-S/T, X≠P）与已注释 CARBOHYD 位点重叠核对；密度启发式仅作审阅提醒",
         "已知活性位点/结合位点/SITE/LIPIDATION 在候选内外的分布（记录）",
@@ -275,7 +284,7 @@ def pi_summary(summary, records):
         f"- 合计能提出候选：{r['any_candidate_share']['numerator']}/{r['any_candidate_share']['denominator']}",
         f"- 分泌扩展对象 {c['secreted_extension_references']} 个单独统计，不混入核心分母（核心参考 {c['core_references']} 个）。",
         "",
-        "## 特殊设计（条件性候选）的主要原因", "",
+        "## 条件性对象的原因与提醒（可多选，不代表每项单独导致分类）", "",
     ]
     if special:
         lines += [f"- {code}: {n} 个对象" for code, n in special.most_common()]
@@ -396,8 +405,19 @@ def figure_source_data(summary):
 def export_screening_outputs(run_dir, definition, records, candidates, version, engine_sha256, pilot,
                              completeness_override=None, review_per_stratum=2):
     run_dir = Path(run_dir)
+    for candidate in candidates:
+        # Recompute this independent layer, never reinterpret a design class.
+        candidate["receiver_function"] = assess_receiver(candidate)
+    by_candidate = {c["candidate_id"]: c for c in candidates}
+    for record in records:
+        primary = by_candidate.get(record.get("primary_candidate_id"), {})
+        record["recommendation_scope"] = "fragment_design_only_not_receiver_function"
+        record["receiver_functional_risk"] = primary.get("receiver_function", {}).get("functional_risk", "not_assessed_no_primary")
+        record["receiver_endpoint_evidence"] = {k: v["evidence_state"] for k, v in primary.get("receiver_function", {}).get("endpoints", {}).items()}
     summary = build_summary(definition, records, candidates, version, engine_sha256, pilot,
                             completeness_override=completeness_override)
+    summary["receiver_function"] = export_receiver_function(run_dir, candidates)
+    summary["receiver_risk"] = export_risk(run_dir, candidates)
     summary["methodology"] = methodology_summary(records, candidates)
     queue = review_queue(records, candidates, review_per_stratum)
     summary["methodology"]["review_queue"] = {"rows": len(queue), "per_stratum": review_per_stratum,
@@ -408,6 +428,15 @@ def export_screening_outputs(run_dir, definition, records, candidates, version, 
     write_json(run_dir / "screening_overview_data.json", figure_source_data(summary))
     tsv(run_dir / "protein_screening.tsv", _rows_for_screening(records, definition["entries"], candidates), SCREENING_COLUMNS)
     tsv(run_dir / "candidate_plan.tsv", candidates, CANDIDATE_TSV_COLUMNS)
+    tsv(run_dir / "antigen_context.tsv", [{"candidate_id": c["candidate_id"], "protein_id": c["protein_id"],
+        "is_primary": c.get("is_primary"), **c.get("antigen_context", {})} for c in candidates],
+        ["candidate_id", "protein_id", "is_primary", "processed_chain_pairs_spanned", "extracellular_mature_products",
+         "overlapping_repeats", "reference_intramembrane_segments", "full_ecd_label_scope", "epitope_evidence_scope", "external_epitope_database_search",
+         "recognition_retention", "interpretation"])
+    tsv(run_dir / "processed_product_review.tsv", [{"accession": r.get("accession"), "isoform": r.get("isoform"),
+        "screening_recommendation": r.get("screening_recommendation"), **product}
+        for r in records for product in r.get("processed_products", [])],
+        ["accession", "isoform", "screening_recommendation", "name", "start", "end", "locations", "scope", "evidence", "raw_comments"])
     tsv(run_dir / "candidate_comparison.tsv", [{"candidate_id": c["candidate_id"], "protein_id": c["protein_id"],
         "is_primary": c.get("is_primary"), "design_status": c.get("design_status"),
         **c["candidate_comparison"]} for c in candidates],
@@ -429,6 +458,10 @@ def export_screening_outputs(run_dir, definition, records, candidates, version, 
                              f"form={c['antigen_form_type']} {role} UNVALIDATED\n{c['sequence']}\n")
     (run_dir / "screening_overview.svg").write_text(figure_svg(summary), encoding="utf-8")
     methodological_note = ("\n## 证据与下一步核验\n\n"
+        "full_ecd 只指完整注释拓扑区间，不代表该基因的全部成熟链或全部表位。"
+        "antigen_context.tsv 与 processed_product_review.tsv 分开记录跨加工链、未覆盖的分泌成熟产物及重复单元切割；"
+        "这些是核验线索，不自动生成新的片段，也不证明融合构建会发生相同加工。\n\n"
+        "表位未知表示本次输入未提供映射注释；没有执行外部表位数据库检索，不能声称文献没有该表位。\n\n"
         "初筛类别与证据类型分开：reviewed 不等于边界实验验证。逐候选 annotation_support 保留来源与 ECO；未知代码不推定实验支持。\n\n"
         "主要候选按已注释结构完整性、已映射表位丢失、完整成熟形式优先级和确定性 ID 顺序比较，"
         "不使用风险条数或未经校准总分。缺少表位不等于保留已获证明。详见 candidate_comparison.tsv。\n\n"
@@ -436,5 +469,10 @@ def export_screening_outputs(run_dir, definition, records, candidates, version, 
         "manual_review_queue.tsv 是分层目的性抽审清单，不用于估计生物学准确率；空白终点表示未测，不是失败。\n\n"
         f"路线诊断（分母为全部 {len(records)} 输入行，包括单列重复与技术失败）：{summary['methodology']['route_states']}\n"
         f"本轮待人工抽审 {len(queue)} 行；不得由 agent 自动批准或将同一基因拆分为独立训练/验证样本。\n")
-    (run_dir / "PI_SUMMARY.md").write_text(pi_summary(summary, records) + methodological_note, encoding="utf-8")
+    functional_note = ("# 两层结论：片段可设计不等于受体功能适配\n\n"
+        "下列常规/条件性类别仅评价片段设计。所有未获得同完整构建、同实验条件终点证据的候选，"
+        "功能风险均为未确定，不是低风险。不得将一般性核验提示计为失败预测命中。"
+        "receiver_function.tsv 分开列出表面表达、识别保留、背景激活、诱导响应；"
+        "receiver_mechanism_review.tsv 只提供待核验问题，不提供成功概率。\n\n")
+    (run_dir / "PI_SUMMARY.md").write_text(functional_note + pi_summary(summary, records) + methodological_note, encoding="utf-8")
     return summary

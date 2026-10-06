@@ -1,4 +1,4 @@
 interface:
   display_name: "ECD-SNIPR Harness"
   short_description: "Batch antigen-fragment screening and SNIPR receiver candidate design"
-  default_prompt: "Use $ecd-snipr-harness to build an analysis set from my target list or a public human membrane-protein query, screen every target into sourced antigen-fragment candidates with per-target screening recommendations, and summarize coverage with explicit denominators. Without our real SNIPR scaffold, deliver candidate fragments and junction notes only — never a guessed fusion."
+  default_prompt: "Use $ecd-snipr-harness to screen a defined human protein set into sourced receiver-antigen fragments and transparent per-target recommendations. For historical workbooks, use the private lab-evidence branch: recover every source cell, audit fragment/reference correspondence, propose links without merging constructs, and separate recorded data from confirmed assay semantics. Missing actual scaffold does not block screening or raw intake. Never guess a fusion, transfer outcomes by gene name, or turn Y/N into functional labels."

@@ -36,7 +36,9 @@ Install an allowlisted clean package. Run installed `manage_skill.py validate`, 
 
 ## Real-data intake regression
 
-When private workbooks are available, `inspect` can test source preservation and mapping without running new protein screening. A successful import proves file parsing, not biological labeling. Keep raw input unchanged and compare before/after hashes. Exact definitions of ambiguous experimental columns remain pending until supplied by the laboratory.
+When private workbooks are available, `lab-evidence` tests source preservation, field coverage, fragment correspondence and interpretation readiness without rerunning protein screening. Compare source-cell counts independently, not only against a legacy flattened table that may itself have dropped fields. Keep before/after source hashes. Definition gaps are distinct from absence of measurements.
+
+`make lab-evidence-fixture` is included in all-checks-offline. Synthetic regressions cover SNIPR/SNPIR aliases, Unicode headings, duplicated columns, repeated/shifted headers, untyped sequences, CDS/AA conflicts, multiple exact positions, native-region overlap, unmerged variants, status markers versus identities, cell-scoped review, mismatching constructs, formula caches, batch separation, verified resume and package exclusions. A fully specified synthetic construct/observation traverses the existing audit branch end to end; this proves software interoperability, not biological function.
 
 ## Not covered by software tests
 

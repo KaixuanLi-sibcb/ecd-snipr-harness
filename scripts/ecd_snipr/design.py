@@ -3,6 +3,7 @@
 import re
 from .common import contains, digest, interval, overlaps, sequence, sourced, translate
 from .criteria import assess_context
+from .antigen_context import assess_antigen_context
 from .profile import (INFORMATIONAL_KINDS, PREDICTION_RELEVANT_KINDS, boundary_analysis,
                       detect_multichain_partners, molecular_profile, n_glyco_sequons)
 
@@ -188,7 +189,7 @@ def propose(protein, scaffold=None, rules=None, reviews=()):
             b = interval(f, len(seq))
             k = f["kind"]
             name = f.get("name", f"{k}:{b[0]}-{b[1]}")
-            if k in {"transmembrane", "signal_peptide", "gpi_signal", "cytoplasmic", "propeptide"} and overlaps(bounds, b):
+            if k in {"transmembrane", "intramembrane", "signal_peptide", "gpi_signal", "cytoplasmic", "propeptide"} and overlaps(bounds, b):
                 risks.append(flag("retained_" + k, "block", name))
             if k == "domain":
                 if contains(bounds, b):
@@ -232,6 +233,8 @@ def propose(protein, scaffold=None, rules=None, reviews=()):
         if multichain:
             risks.append(flag("native_heteromer_context_requires_review", "review",
                               "Native SUBUNIT context, not proof of ECD partner dependence: " + " | ".join(multichain)))
+        antigen_context, context_flags = assess_antigen_context(protein, bounds)
+        risks.extend(context_flags)
         criteria_review, context_risks = assess_context(protein, bounds)
         risks.extend(context_risks)
         missing_criteria = [r["kind"] for r in criteria_review if r["status"] == "missing"]
@@ -273,6 +276,7 @@ def propose(protein, scaffold=None, rules=None, reviews=()):
             "rationale": region.get("rationale", ""), "boundary_evidence": region.get("evidence", {}),
             "boundary_analysis": boundary, "molecular_profile": profile,
             "multichain_partners": multichain,
+            "antigen_context": antigen_context,
             "domains_retained": covered, "domains_cut": cut, "domains_omitted": lost,
             "epitope_review": epitopes, "potential_glycosylation_sites": sequons,
             "risks": risks, "scaffold_issues": scaffold_check(scaffold),

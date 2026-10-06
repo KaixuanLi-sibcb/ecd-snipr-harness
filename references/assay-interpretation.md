@@ -1,5 +1,10 @@
 # Four endpoint contract
 
+For automated workbook recovery use the [v0.6.0 private intake](lab-evidence-v060.md).
+Reported headings, confirmed measurement definitions and eligible quantitative
+records are separate layers. A plasmid column containing Y or a checkmark does not
+supply a construct ID. A fragment/reference match is not full-receptor equivalence.
+
 | Endpoint | Question | What it does not prove |
 |---|---|---|
 | `surface_expression` | Is this actual receptor detectable on the cell surface? | Correct antigen conformation, binding or signaling |

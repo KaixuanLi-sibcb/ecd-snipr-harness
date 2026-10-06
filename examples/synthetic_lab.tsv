@@ -1,0 +1,3 @@
+AgID	gene	Entry	ECD_aa	self-activation of Ag-SNIPR	Surface_level(MFI)	SNIPR Assay(Y/N)	Ag-SNIPR plasmid	note	note
+SYNTHETIC-001	SYNTHETIC_A	P12345	ACDEFGHIKLMNPQ	0	17	Y	SYNTHETIC-PLASMID	Synthetic only	Units and context intentionally unspecified
+SYNTHETIC-002	SYNTHETIC_B	P23456	ACDEFGHIKLMN		19	N	SYNTHETIC-PLASMID-2	Synthetic only	Not a biological validation example

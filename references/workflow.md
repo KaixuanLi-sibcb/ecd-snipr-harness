@@ -1,6 +1,29 @@
 # Workflow and operational boundaries
 
-Current v0.5.0 uses [methodology](methodology-v050.md): candidate repertoire tradeoffs, separate annotation support, route diagnostics, receiver questions and a pending purposive review queue. The v0.4.2 [audit corrections](audit-v042.md) remain: core topology/exclusion annotations cannot be deferred simply because another is valid; per-candidate advice is independent; canonical labels and annotation molecule/sequence applicability are checked before design. Rebuild normalized inputs after parser changes, never mutate old run bundles.
+v0.8.0 adds [mechanism-priority triage and local sequence integrations](receiver-risk-v080.md)
+after the same candidate generator. Every candidate retains its design class, four
+endpoint evidence states and a separate risk-review priority. `receiver-risk` uses
+the exact reference set for historical overlays; no outcome workbook is an input.
+`sequence-tools` runs local descriptors and optional Biopython, recording unavailable
+tools honestly. Priorities are uncalibrated hypotheses and missing experimental
+context never establishes low functional risk. Freeze rules before a cohort-wide
+analysis and report flag prevalence, not just matches among known failures.
+
+v0.7.0 adds the [independent receiver-function layer](receiver-function-v070.md)
+after fragment design and optional construct linkage. Both `screen` and `run` export
+four endpoint evidence states and mechanism-review questions. Missing experiments do not
+block design, but a routine design is never labeled functionally low risk. `receiver-audit`
+adds a checksum-bound overlay to a historical bundle without changing its recommendations.
+No failure workbook is automatically read, no gene-specific exceptions are installed,
+and no classifier is trained. The development data cannot later be declared held out.
+
+v0.6.0 adds an independent [private laboratory evidence branch](lab-evidence-v060.md):
+read-only workbook -> lossless cells -> provisional layout mapping -> fragment/reference
+audit -> proposed links -> optional cell-specific semantic review and audited constructs
+-> separate endpoint records. Missing scaffold does not block raw intake. This branch
+does not change the public candidate engine or rerun public ranking.
+
+The v0.5.1 changes retain the v0.5.0 [methodology](methodology-v050.md): candidate repertoire tradeoffs, separate annotation support, route diagnostics, receiver questions and a pending purposive review queue. [Biological-unit checks](antigen-units-v051.md) add mature-product scope, processing spans, repeat cuts and intramembrane exclusions. The v0.4.2 [audit corrections](audit-v042.md) remain: core topology/exclusion annotations cannot be deferred simply because another is valid; per-candidate advice is independent; canonical labels and annotation molecule/sequence applicability are checked before design. Rebuild normalized inputs after parser changes, never mutate old run bundles.
 
 ## Unit of analysis
 
@@ -12,8 +35,8 @@ The human membrane proteome is a reference universe, not an implicit denominator
 
 0. **Set building** (`build-set` / the chained first step of `screen`): user target list or public UniProt query. Accessions are processed directly; gene names go through recorded `gene_exact + organism_id:9606` mapping (reviewed entries first, then all), ambiguity preserved, no guessing, no row dropped, duplicates linked. Gene mapping follows UniProt pagination — a multi-page result can never be silently truncated into a false "resolved"; exceeding the page cap is recorded as an error, not a guess. Every entry gets an explicit disposition: membrane-set membership, natural cell-surface target, design scope, secreted extension, technical failure. Fetch/mapping caches are content-addressed and resumable; per-entry UniProt entry versions are recorded. Search pages and fetches retry transient 429/5xx errors with bounded backoff, honoring a capped `Retry-After` hint.
 1. **Analysis-reference selection**: screening explicitly selects the database canonical sequence (or an explicitly requested accession-isoform) as the analysis reference and records the rationale. This is distinct from laboratory isoform confirmation, which still gates final fusion assembly. Genuine identity ambiguity, version conflicts and non-canonical coordinate problems are preserved. The annotated isoform inventory (`alternative_products`, including the count) is recorded with the selection; sequence-level comparison against other isoforms is explicitly `not_evaluated` because the UniProt entry document does not carry isoform sequences — annotated differences are never assumed absent.
-2. **Inventory**: use `inspect`; hash the source bytes and preserve exact sheet/row/cell references, including formulas and cached values. XLSX formatting is not interpreted as units; formulas are not recalculated. Merge ranges are recorded, never silently filled down.
-3. **Semantic mapping**: use `map` with explicit columns. Resolve aliases and intended isoforms outside the sequence-design engine. An agent can research ambiguity but must retain alternatives and sources. Do not turn raw mapped rows directly into outcome labels.
+2. **Inventory**: use `lab-evidence` for the full private intake, or `inspect` for low-level cells. Hash the source and preserve exact sheet/row/cell references, including formulas/caches. Formatting is not interpreted as units, merges are not filled down, and duplicate/unknown columns remain visible.
+3. **Semantic mapping**: provisional dictionary mapping is distinct from reviewed measurement definitions. `map` remains available for explicit low-level columns. Cell-hash-bound reviews plus audited constructs gate quantitative interpretation; missing definitions never erase original data. Gene/fragment link suggestions are not confirmed receiver identities.
 4. **Reference annotation**: import local UniProt JSON or public accession fetch results. Coordinate evidence must apply to the exact sequence/isoform. Import predictions only with versions and sources, preserving conflicts. Parsed features and SUBUNIT/FUNCTION/PTM comments retain annotation evidence and applicability; excluded contexts remain visible. Fuzzy/unsourced secondary annotations may be deferred, but all invalid core topology/exclusion annotations remain blocking, even when another of the same kind is valid. The strict assembly path keeps every fuzzy candidate-relevant feature blocking; informational-only features stay review notes.
 5. **Candidate generation**: prefer a continuous full antigen form, preserving input order. Full-domain alternatives require explicit opt-in (`auto` opts in for multi-pass only); processed secreted/GPI forms and documented shed forms follow the [criteria policy](screening-criteria.md). A user-sourced experimental fragment is a proposal, not proof of performance. There is no random sliding-window generation or mutation optimization.
 6. **Screening recommendation**: one transparent decision table per in-scope reference (standard / conditional / no standard route / insufficient evidence), with reason codes, rationale, evidence, missing info and alternates. See the [criteria policy](screening-criteria.md). Optional sourced lab rules annotate or downgrade only.

@@ -1,5 +1,56 @@
 # Changelog
 
+### Public v0.8.1 repository synchronization - 2026-10-06
+
+- Publish the allowlisted workflow and synthetic regression suite, including the independent four-endpoint evidence and mechanism-priority layers. Do not publish institutional source workbooks, actual constructs, case lists, outcome counts or retrospective comparisons.
+- Add an explicit homepage validation table distinguishing candidate coverage, sequence concordance, uncalibrated mechanism triage and measured receiver outcomes. No held-out accuracy or positive/negative performance estimate is claimed.
+- Extend Git ignore rules to cover receiver-function, receiver-risk and sequence-tool result artifacts. Privacy checks remain necessary but do not replace content review before publication.
+
+## 0.8.1 - 2026-10-06 (annotation alias coverage correction)
+
+- Recognize generic self-ligand/self ligand descriptions alongside homophilic association, including negation and full-interval versus fragment scope. No gene identifiers or outcome features are added.
+- Disclose that this correction followed a developmental source audit; preserve the initial frozen v0.8.0 evaluation rather than retrospectively replacing it. Re-evaluation is not held-out validation. No numeric descriptor threshold or candidate generator changed.
+
+
+## 0.8.0 - 2026-10-06 (mechanism-priority triage and local sequence tools)
+
+- Preserve fragment generation, primary selection, screening classes, receiver assembly gates and all four endpoint evidence contracts.
+- Add independent, name-blind risk-review priorities from exact retained annotation features, native self-association/shedding/ligand context and local sequence descriptors. Keep localized evidence, whole-protein context, negation, excluded coordinates and prediction scope distinct.
+- Add local Kyte-Doolittle, Shannon entropy and S/T/P profiles; optional pinned Biopython properties with hydropathy cross-check; strictly sequence/hash/version/coordinate-bound imports of local IUPred/DeepTMHMM/SignalP output. No external predictor execution is claimed when not run.
+- Add immutable `receiver-risk` and `sequence-tools` CLI bundles, per-candidate/source checks, partial completeness, privacy exclusions and synthetic/end-to-end regressions.
+- No gene blacklist, failure-label tuning, composite success score or validated self-activation predictor. Generic warnings are not hits; retrospective known cases are developmental checks, not held-out tests. Public cohort flag prevalence must accompany any case comparison.
+
+
+## 0.7.0 - 2026-10-06 (fragment design versus receiver-function evidence)
+
+- Preserve candidate generation, selection, boundaries and design classifications. Add an independent four-endpoint receiver assessment to both batch and project outputs.
+- Explicitly represent unknown functional risk rather than treating a routine candidate or an absent warning as low risk. No fitted thresholds, gene lists, composite scores or claimed function predictor.
+- Organize existing annotation/context signals into mechanism-review questions, retaining missing, out-of-fragment and conflicting evidence. Generic warnings are not predicted failure hits.
+- Associate measurements only with sequence-consistent complete receivers and exact scaffold IDs/versions; preserve antigen-only links as non-equivalent. Keep batches, replicates, gates and four endpoints separate; retain conflicts and raw provenance.
+- Add checksum-verified, immutable `receiver-audit` overlays for historical bundles, public output contracts and synthetic regression tests. No private case list is bundled or read by this layer.
+- Update skill, workflow and reporting guidance with a strict distinction between retrospective development cases and independent functional validation.
+
+## 0.6.0 - 2026-09-20 (private laboratory evidence reconciliation)
+
+- Add offline `lab-evidence` CLI with source checksums, immutable bundles, resume verification and no network calls. Preserve original cells, formulas, merges, duplicate columns, repeated header sections and unknown fields.
+- Recover correctly spelled SNIPR fields while recognizing historical SNPIR aliases. Separate shifted/composite-identity layouts instead of silently interpreting misplaced values.
+- Preserve shared-formula attributes and anchor relationships, including follower cells with no formula text. Caches are not recalculated; derived sequence/readout interpretation requires explicit review. Independent-reader comparison exposed this previously untested path.
+- Audit fragment strings, paired CDS translation and exact public-reference coordinates; record ambiguity, native exclusions and domain cuts without editing sequences or transferring isoform confirmation.
+- Propose, but never approve, cross-row construct links. Y/N/checkmarks in plasmid columns are not shared identifiers. Preserve sequence variants and label conflicts.
+- Separate source presence, reported endpoint, confirmed definition and eligible quantitative measurement. Require cell-bound human semantic review plus audited actual constructs; exclude project status/serology from receiver-outcome labels. Keep all four endpoints independent.
+- Add private-data artifact exclusions, synthetic fixture target, regression tests and operational guidance. Candidate generation and public screening recommendations are unchanged; no private data, actual scaffold, trained model or success probability is bundled.
+
+## 0.5.1 - 2026-09-20 (antigen-unit audit)
+
+- Separate a complete topological interval from the repertoire of mature products encoded by the reference. Link exact uniquely named reference-chain features to product-scoped localization without projecting it onto the precursor.
+- Add sourced processing-span, omitted extracellular mature-product and repeat-cut review flags. These can make candidates conditional; they do not prove cleavage, misfolding or loss of binding. Do not auto-generate new sequences from these records or treat repeats as standalone domains.
+- Recognize a one-TM orientation with multiple extracellular intervals on the same side, while preserving the explicit product-specific route gap and no-concatenation rule.
+- Import Intramembrane segments separately from transmembrane spans. Overlap blocks soluble candidates; fuzzy exclusion coordinates remain essential, and embedded segments do not become a second TM or a presumed cleavage site.
+- Export antigen_context.tsv and processed_product_review.tsv with immutable artifact hashes; stratify processing/repertoire review cases separately. Distinguish absent epitope input from a negative external search.
+- Fix aliased reason_codes/missing_info lists. Preserve old run bundles, four-endpoint interpretation and real-scaffold approval gates. Public full-run regression is separate from biological validation.
+- Validate with 225 tests and an offline replay of the same 7,783 public references: 562 standard / 1,247 conditional / 1,600 unsupported route / 2,286 insufficient / 2,088 outside scope; zero technical failures and 18 integrity/sequence checks pass. Eight reference dispositions/primary choices change; no candidate IDs are added or removed. All functional endpoints remain unmeasured; 114 purposive review rows remain pending.
+
+
 ## 0.5.0 - 2026-09-20 (methodology and evidence upgrade)
 
 - Preserve the v0.4.2 reference/isoform fixes and candidate engine. Separate four-class design advice from per-feature annotation support, receiver planning, assembly authorization and four experimental endpoints.

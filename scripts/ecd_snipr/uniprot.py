@@ -9,6 +9,7 @@ import urllib.request
 from pathlib import Path
 from .common import digest, file_hash, now, read_json, write_json
 from . import __version__
+from .antigen_context import processed_products
 
 RETRYABLE_HTTP = {429, 500, 502, 503, 504}
 MAX_RETRY_AFTER = 60  # never sleep longer than this on a single Retry-After hint
@@ -31,12 +32,12 @@ def retry_delay(exc, attempt):
 # (curated vs prediction by ECO code). Candidate-defining kinds are interpreted
 # by the engine; informational kinds (region/motif/sites/variants/...) are
 # parsed for the molecular profile and never silently dropped.
-FEATURE_KINDS = {"Signal": "signal_peptide", "Transmembrane": "transmembrane", "Domain": "domain",
+FEATURE_KINDS = {"Signal": "signal_peptide", "Transmembrane": "transmembrane", "Intramembrane": "intramembrane", "Domain": "domain",
                  "Disulfide bond": "disulfide", "Chain": "chain", "Peptide": "processed_peptide",
                  "Propeptide": "propeptide", "Region": "region", "Motif": "motif",
                  "Glycosylation": "glycosylation_site", "Site": "site", "Binding site": "binding_site",
                  "Active site": "active_site", "Natural variant": "variant", "Mutagenesis": "mutagenesis",
-                 "Lipidation": "lipidation"}
+                 "Lipidation": "lipidation", "Repeat": "repeat"}
 
 # Comment types whose text is machine-readable enough to record verbatim.
 # SUBUNIT feeds the deterministic hetero-oligomer scan; FUNCTION/PTM are
@@ -78,6 +79,7 @@ def normalize(raw):
     displayed = [i for i in isoforms if i["sequence_status"].lower() == "displayed"]
     canonical_ids = {v for i in displayed for v in i["isoform_ids"]}
     p["canonical_isoform_ids"] = sorted(canonical_ids)
+    p["processed_products"] = processed_products(raw, accession, canonical_ids, source)
     requested = raw.get("requested_isoform", "")
     p["reference_coordinate_status"] = "canonical_entry"
     if requested and requested not in canonical_ids and requested != accession:
@@ -172,10 +174,10 @@ def normalize(raw):
         p["topology"] = "gpi"
     elif not tm and p["has_secreted_reference_annotation"]:
         p["topology"] = "secreted"
-    elif len(tm) == 1 and len(ex) == 1 and all(type(v) is int for v in [tm[0]["start"], tm[0]["end"], ex[0]["start"], ex[0]["end"]]):
-        if ex[0]["end"] < tm[0]["start"]:
+    elif len(tm) == 1 and ex and all(type(v) is int for f in tm + ex for v in (f["start"], f["end"])):
+        if all(f["end"] < tm[0]["start"] for f in ex):
             p["topology"] = "type_i"
-        elif ex[0]["start"] > tm[0]["end"]:
+        elif all(f["start"] > tm[0]["end"] for f in ex):
             p["topology"] = "type_ii"
     return p
 
