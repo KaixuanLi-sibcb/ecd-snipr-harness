@@ -1,5 +1,31 @@
 # Data contracts
 
+## Scheduled predictor contract (v0.10.2)
+
+Portable jobs bind exact reference-set/protein/sequence hashes, declared scope,
+duplicate input relationships and explicit exclusions. Worker completion binds
+jobs/config/code/model and parameters; raw reimport independently checks the result.
+Eligible completion, original set completeness and pilot scope are distinct.
+Prediction artifacts/configurations are excluded from Git and skill packages.
+See [scheduled execution](hpc-execution.md) and [integrated standards](workflow-and-standards.zh-CN.md).
+
+## Core evidence and predictor scopes (v0.9.0)
+
+`receiver_risk.core_evidence` follows [core_evidence.schema.json](../schemas/core_evidence.schema.json).
+It separates `status`, source-specific `coverage`, individual `checks`, exact domain
+instances and rejected/unresolved evidence. `checks_completed_no_conflict` describes
+methods actually run, not a functional pass. Existing design status is unchanged.
+New outputs and immutable CLI behavior are specified in [core evidence](core-evidence-v090.md).
+
+Optional normalized predictor records use `input_scope=candidate_fragment` with
+candidate ID/plain-sequence SHA256, or `full_reference` with accession/exact full
+sequence SHA256 plus a sourced reference. Both require 1-based-inclusive coordinates,
+actual version/parameters/source and hash-verified raw output. Raw-input FASTA hashes
+from `import-prediction` are also reverified. Projection retains original intervals,
+excluded regions and the matched candidate ID; no full-fusion scope is implemented.
+Native outside topology cannot confirm plasma-membrane localization. No field or
+enum in legacy EvidenceRecord v2 is changed; new computations retain native context.
+
 ## Receiver risk and optional software evidence (v0.8.0)
 
 `receiver_risk` is independent of `screening_recommendation`, `assembly_status`
@@ -8,7 +34,7 @@ functional risk category. Native annotation sources, excluded/unresolved text,
 retained coordinates, computed descriptors and absent receiver context stay explicit.
 See [the rule and predictor input contract](receiver-risk-v080.md).
 
-Local predictor records require the exact fragment ID, plain-sequence SHA256,
+Legacy fragment predictor records require the exact fragment ID, plain-sequence SHA256,
 software/version, parameters, source and hash-verified raw output file. Canonical
 full-protein coordinates are not fragment coordinates. No private sequences are
 uploaded by this workflow; normalized imports remain predictions, not outcomes.

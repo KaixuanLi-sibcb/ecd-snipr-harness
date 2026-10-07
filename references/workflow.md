@@ -1,5 +1,22 @@
 # Workflow and operational boundaries
 
+The current integrated guide is [workflow and standards](workflow-and-standards.zh-CN.md).
+v0.10.2 publishes local execution and [portable scheduled workers](hpc-execution.md)
+alongside independent raw-result reconciliation. Vendor models remain external.
+No candidate-generation or mechanism-triage rule changes are introduced by this
+deployment/documentation release. Design, cross-check, review priority and actual
+experimental endpoints are separate axes. The sequential CPU-only statement below
+describes the core batch design path, not the optional scheduled GPU worker.
+
+v0.9.0 adds [core annotation cross-checks](core-evidence-v090.md) after candidate
+generation: exact sequence/interval binding, retained/cut/omitted structural units,
+conservative comment-subject attribution and full-reference predictor projection.
+InterPro retrieval is optional and public-accession-only, never an upload of a
+private sequence. These checks are separate from the existing design classes and
+actual receptor endpoints. New UniProt imports retain statement citations; old
+normalized records are not silently rewritten. Local predictor import is not
+predictor execution. Immutable core-evidence overlays preserve historical designs.
+
 v0.8.0 adds [mechanism-priority triage and local sequence integrations](receiver-risk-v080.md)
 after the same candidate generator. Every candidate retains its design class, four
 endpoint evidence states and a separate risk-review priority. `receiver-risk` uses

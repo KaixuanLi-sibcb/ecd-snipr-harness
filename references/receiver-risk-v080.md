@@ -1,5 +1,10 @@
 # Receiver mechanism-priority triage v0.8.0
 
+Current v0.9.0 adds [core evidence cross-checks](core-evidence-v090.md): conservative
+comment-subject attribution, explicit full-reference prediction projection, local
+vendor-output import and optional InterPro/Pfam retrieval. The original fragment-only
+contract below documents v0.8 behavior; the v0.9 scope contract takes precedence.
+
 v0.8.1 / policy 1.1 recognizes the general `self-ligand` synonym as native
 self-association context, including negation and fragment-scope checks. The gap was
 noticed during a developmental audit after the first frozen cohort evaluation;

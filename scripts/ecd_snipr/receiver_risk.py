@@ -14,8 +14,12 @@ from pathlib import Path
 
 from .common import digest, file_hash, interval, now, read_json, sequence, sourced, tsv, write_json
 from .sequence_tools import PARAMETERS, descriptors, sequence_hash, validate_prediction
+from .annotation_scope import association_subject, ligand_subject, statements
+from .core_evidence import check_core, export_core
 
-POLICY = {"version": "1.1", "sequence_parameters": PARAMETERS,
+POLICY = {"version": "2.0", "sequence_parameters": PARAMETERS,
+          "comment_subject_policy": "explicit_reference_subject_or_unresolved",
+          "core_evidence_policy": "exact_fragment_domain_and_topology_crosscheck_v1",
           "tiers": ["elevated_review_priority", "context_dependent_review", "sequence_alert_only", "no_specific_signal_detected", "not_assessed"],
           "identity_features": False, "lab_outcomes_used": False, "probability": False,
           "negative_annotation_means_safe": False, "sequence_alert_can_establish_high_risk": False}
@@ -45,7 +49,7 @@ def read_reference(path, expected_hash):
     return json.loads(process.stdout)
 
 
-def assess_risk(candidate, protein=None, predictions=(), use_biopython=False):
+def assess_risk(candidate, protein=None, predictions=(), use_biopython=False, interpro=None):
     """Do not inspect gene/accession or outcome labels in the decision logic."""
     result = {"policy": POLICY, "policy_sha256": POLICY_SHA256, "claim_limit": LIMIT,
         "signals": [], "excluded_or_unresolved_evidence": [], "tool_evidence": [],
@@ -61,6 +65,7 @@ def assess_risk(candidate, protein=None, predictions=(), use_biopython=False):
         return dict(result, review_priority='not_assessed', assessment_status='invalid_sequence', reason_codes=[str(exc)])
     tools = descriptors(seq, use_biopython)
     result['sequence_analysis'] = tools
+    result['core_evidence'] = check_core(candidate, protein, interpro, predictions)
     full = candidate.get('antigen_form_type') in {'full_ecd','mature_gpi','mature_secreted'}
     validated_reference = False
     if protein is not None:
@@ -106,16 +111,21 @@ def assess_risk(candidate, protein=None, predictions=(), use_biopython=False):
                         'Check protease and junction context; compare retained receptor/fragment and unstimulated reporter.')
         for field in ('ptm_comments','subunit_comments','function_comments'):
             for index, comment in enumerate(protein.get(field, [])):
-                text = comment.get('text','')
-                for clause in re.split(r'[.;]\s+',text):
+                clauses = ((s, part) for s in statements(comment) for part in re.split(r'[.;]\s+', s.get('text','')))
+                for statement, clause in clauses:
                     if not (SELF_ASSOC.search(clause) or SHEDDING.search(clause) or (ENDOGENOUS_BINDING.search(clause) and BINDING.search(clause))):
                         continue
-                    ev = dict(protein['evidence'], field=field, comment_index=index, text=clause, eco=comment.get('eco',[]),
+                    ev = dict(protein['evidence'], field=field, comment_index=index, text=clause,
+                              eco=statement.get('eco',[]), statement_evidences=statement.get('evidences',[]),
                               applicability='native_reference_context_site_not_localized', fragment_is_full_topological_interval=full)
                     if NEGATION.search(clause):
                         result['excluded_or_unresolved_evidence'].append(dict(ev, reason='negated_or_mixed_clause_requires_manual_interpretation'))
                         continue
                     if SELF_ASSOC.search(clause):
+                        subject = association_subject(clause)
+                        if subject != 'reference_subject':
+                            result['excluded_or_unresolved_evidence'].append(dict(ev, reason=subject))
+                            continue
                         intracellular = re.search(r'\b(?:cytoplasm\w*|intracellular|transmembrane|kinase domain)\b',clause,re.I)
                         if intracellular and not re.search(r'\bextracellular\b',clause,re.I):
                             result['excluded_or_unresolved_evidence'].append(dict(ev, reason='native_association_not_localized_to_retained_ecd'))
@@ -130,6 +140,9 @@ def assess_risk(candidate, protein=None, predictions=(), use_biopython=False):
                             'Native shedding is reported, but the cleavage position/protease applicability to this fragment is not established by this text.',
                             'Localize the processing site and assess retention plus actual receiver junction; measure intact surface receptor and baseline.')
                     if ENDOGENOUS_BINDING.search(clause) and BINDING.search(clause):
+                        if ligand_subject(clause) != 'reference_subject':
+                            result['excluded_or_unresolved_evidence'].append(dict(ev, reason='ligand_binding_subject_unresolved'))
+                            continue
                         signal('endogenous_or_medium_ligand_context', 'context_dependent_review', ['basal_activation','recognition_retention'],ev,
                             'Native glycan/immunoglobulin binding may complicate cell/medium controls; ligand availability and force coupling are unknown.',
                             'Check actual host, sender, tags and medium; include nonbinding/ligand-context controls, not a gene-specific blacklist.')
@@ -155,18 +168,23 @@ def assess_risk(candidate, protein=None, predictions=(), use_biopython=False):
                {'kind':'computed_descriptor','segments':tools['low_complexity_segments'],'parameters':PARAMETERS},
                'Window entropy detects compositional bias, not disorder, condensate formation or SNIPR activation.',
                'Use a local disorder predictor or structural/domain evidence if this interval affects the connection; do not truncate merely for complexity.')
+    for check in result['core_evidence']['checks']:
+        if check['code'] in {'domain_boundary_cut','retained_native_exclusion_region'}:
+            signal('core_' + check['code'], 'context_dependent_review', ['surface_expression','recognition_retention'],check,
+                   'Exact fragment/domain or exclusion-region conflict needs review; boundaries are not silently replaced.',
+                   'Reconcile source/sequence/version and preserve epitope tradeoffs before assembly.')
     for prediction in predictions:
         try:
-            record = validate_prediction(prediction,candidate)
+            record = validate_prediction(prediction,candidate,protein)
         except (ValueError,KeyError,TypeError) as exc:
             result['excluded_or_unresolved_evidence'].append({'reason':'rejected_tool_evidence','detail':str(exc),'record':prediction})
             continue
         result['tool_evidence'].append(record)
-        if record['software'] in {'DeepTMHMM','SignalP'} and record['regions']:
+        if record['software'] in {'DeepTMHMM','DeepTMHMM2','SignalP'} and any(r['kind'] in {'transmembrane','signal_peptide','inside','cytoplasmic','reentrant','interfacial','transit_peptide'} for r in record['regions']):
             signal('predicted_membrane_or_signal_conflict', 'context_dependent_review', ['surface_expression'],record,
                    'Predicted regions in the proposed fragment conflict with a soluble extracellular route; prediction is not experimental evidence.',
                    'Reconcile reference topology and sequence before assembly; do not silently replace curated boundaries.')
-        elif record.get('scores'):
+        elif record.get('scores') and record['software'] in {'IUPred2A','IUPred3','AIUPred'}:
             result.setdefault('disorder_descriptors',[]).append({'software':record['software'],'version':record['version'],
                 'fraction_above_0_5':sum(v>0.5 for v in record['scores'])/len(seq),
                 'interpretation':'prediction_only_not_functional_risk_threshold'})
@@ -204,11 +222,12 @@ def export_risk(outdir,candidates):
         'signal_candidate_counts':dict(Counter(code for c in usable for code in c['receiver_risk']['reason_codes'])),
         'annotation_assessment_states':dict(Counter(c['receiver_risk']['assessment_status'] for c in usable)),
         'claim_limit':LIMIT,'biological_accuracy':'not_estimated','lab_outcome_labels_used':False}
+    summary['core_evidence'] = export_core(outdir,candidates)
     write_json(outdir/'receiver_risk_summary.json',summary)
     return summary
 
 
-def audit_risk(run_dir, reference_set, outdir, tool_evidence=None, resume=False):
+def audit_risk(run_dir, reference_set, outdir, tool_evidence=None, resume=False, interpro_cache=None, interpro_live=False):
     from . import __version__
     from .harness import engine_hash, verify_bundle
     source, root, setdir = Path(run_dir).resolve(), Path(outdir).resolve(), Path(reference_set).resolve()
@@ -223,12 +242,15 @@ def audit_risk(run_dir, reference_set, outdir, tool_evidence=None, resume=False)
         raise ValueError('Tool evidence must be a list of normalized records')
     candidates = read_json(source/'candidates.json')
     ids = {c['candidate_id'] for c in candidates}
-    if any(p.get('candidate_id') not in ids for p in predictions):
-        raise ValueError('Unknown candidate in tool evidence; no silently ignored records')
+    accessions = {c.get('accession') or c.get('protein_id') for c in candidates}
+    if any((p.get('accession') not in accessions if p.get('input_scope') == 'full_reference' else p.get('candidate_id') not in ids) for p in predictions):
+        raise ValueError('Unknown candidate/reference in tool evidence; no silently ignored records')
     for p in predictions:
         raw_path = p.get('raw_output_path')
         if not raw_path or file_hash(raw_path) != p.get('raw_output_sha256'):
             raise ValueError('Local predictor raw output file/hash required; provenance not verified')
+        if p.get('raw_input_path') and file_hash(p['raw_input_path']) != p.get('raw_input_sha256'):
+            raise ValueError('Predictor input FASTA changed after import')
     inputs = {'source_manifest_sha256':source_hash,'set_definition_sha256':set_hash,'engine_sha256':engine_hash(),
               'policy_sha256':POLICY_SHA256,'tool_evidence_sha256':file_hash(tool_evidence) if tool_evidence else None}
     key = digest(inputs)
@@ -253,10 +275,27 @@ def audit_risk(run_dir, reference_set, outdir, tool_evidence=None, resume=False)
             proteins[pid] = p
             if error:
                 errors.append(error)
+    interpro_records = {}
+    if interpro_live and not interpro_cache:
+        raise ValueError('InterPro live retrieval needs an explicit cache directory')
+    if interpro_cache:
+        from .interpro import fetch_domains
+        for pid,p in proteins.items():
+            if p is None:
+                continue
+            # Only public human canonical annotations leave the host, never sequences.
+            if p.get('taxon_id') != 9606 or p.get('evidence',{}).get('kind') == 'synthetic_fixture':
+                interpro_records[pid] = {'status':'missing','reason':'not_a_public_human_reference'}
+            else:
+                interpro_records[pid] = fetch_domains(pid,interpro_cache,offline=not interpro_live)
+    inputs['interpro_records_sha256'] = digest({pid:{k:v for k,v in r.items() if k not in {'snapshot','retrieved_at','status','raw_snapshot_path'}} for pid,r in interpro_records.items()})
+    key = digest(inputs)
+    dest = root/key[:20]
     for c in candidates:
         pid = c.get('accession') or c.get('protein_id')
         try:
-            c['receiver_risk'] = assess_risk(c,proteins[pid],[p for p in predictions if p['candidate_id']==c['candidate_id']])
+            selected = [p for p in predictions if (p.get('accession') == pid if p.get('input_scope') == 'full_reference' else p.get('candidate_id') == c['candidate_id'])]
+            c['receiver_risk'] = assess_risk(c,proteins[pid],selected,interpro=interpro_records.get(pid))
         except (ValueError,KeyError,TypeError,AttributeError) as exc:
             errors.append({'candidate_id':c['candidate_id'],'reason':str(exc)})
             c['receiver_risk'] = dict(assess_risk(c),review_priority='not_assessed',assessment_status='technical_assessment_error',reason_codes=['processing_error'])
@@ -266,15 +305,30 @@ def audit_risk(run_dir, reference_set, outdir, tool_evidence=None, resume=False)
         for pid,p,error in pool.map(load,[pid for pid,p in proteins.items() if p is not None]):
             if error:
                 raise ValueError('Reference changed or became unavailable during audit: '+pid)
+    for record in interpro_records.values():
+        if record.get('raw_snapshot_path') and file_hash(record['raw_snapshot_path']) != record['raw_response_sha256']:
+            raise ValueError('InterPro snapshot changed during audit')
+    for prediction in predictions:
+        if file_hash(prediction['raw_output_path']) != prediction['raw_output_sha256']:
+            raise ValueError('Predictor output changed during audit')
+        if prediction.get('raw_input_path') and file_hash(prediction['raw_input_path']) != prediction['raw_input_sha256']:
+            raise ValueError('Predictor input changed during audit')
     if dest.exists():
         if resume and not errors and verify_bundle(dest):
             return {'run_dir':str(dest),'execution':'verified_cache_hit','summary':read_json(dest/'receiver_risk_summary.json')}
         raise FileExistsError('Risk bundle exists/corrupt or reference changed; preserved. Choose a new output root')
     dest.mkdir(parents=True)
     summary = export_risk(dest,candidates)
-    summary.update(reference_errors=errors,completeness='partial' if errors or definition.get('completeness') != 'complete' else 'complete')
+    enrichment_errors = [dict(accession=pid,reason=r.get('reason','source_unavailable')) for pid,r in interpro_records.items() if r['status'] == 'error']
+    enrichment_conflicts = [c['candidate_id'] for c in candidates if c.get('receiver_risk',{}).get('core_evidence',{}).get('coverage',{}).get('interpro') == 'conflict']
+    tool_conflicts = [c['candidate_id'] for c in candidates if 'rejected' in c.get('receiver_risk',{}).get('core_evidence',{}).get('coverage',{}).values()]
+    summary.update(reference_errors=errors, enrichment_errors=enrichment_errors, enrichment_conflicts=enrichment_conflicts,
+        tool_evidence_conflicts=tool_conflicts,
+        completeness='partial' if errors or enrichment_errors or enrichment_conflicts or tool_conflicts or definition.get('completeness') != 'complete' else 'complete',
+        enrichment_coverage='partial' if any(r['status'] not in {'cached','fetched'} for r in interpro_records.values()) else 'complete' if interpro_records else 'not_run')
     write_json(dest/'receiver_risk_summary.json',summary)
     write_json(dest/'candidates.json',candidates)
+    write_json(dest/'core_source_records.json',{pid:{k:v for k,v in r.items() if k != 'snapshot'} for pid,r in interpro_records.items()})
     write_json(dest/'risk_policy_snapshot.json',{'policy':POLICY,'implementation_sha256':inputs['engine_sha256'],
         'freeze_basis':'rules applied before importing laboratory outcome workbook','prior_cases_seen_during_development':True,
         'retrospective_evaluation_is_not_held_out':True})

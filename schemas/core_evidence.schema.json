@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Exact-fragment annotation cross-check, not functional prediction",
+  "type": "object",
+  "required": ["candidate_id", "status", "coverage", "checks", "domains", "reason_codes", "rejected_evidence", "claim_limit"],
+  "properties": {
+    "status": {"enum": ["not_assessed", "reference_conflict", "checks_completed_no_conflict", "crosscheck_review_required", "crosscheck_source_conflict", "checks_partial_evidence_unresolved"]},
+    "coverage": {"type": "object", "required": ["uniprot", "interpro", "SignalP", "DeepTMHMM", "disorder"]},
+    "checks": {"type": "array", "items": {"type": "object", "required": ["code", "state"]}},
+    "domains": {"type": "array", "items": {"type": "object", "required": ["database", "start", "end", "fragments", "retention", "evidence"]}},
+    "reason_codes": {"type": "array"},
+    "rejected_evidence": {"type": "array"}
+  }
+}

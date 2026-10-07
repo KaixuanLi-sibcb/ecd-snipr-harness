@@ -1,5 +1,17 @@
 # Validation and acceptance
 
+## Current public release (v0.10.2)
+
+Run `make all-checks-offline`: CLI/contract validation, synthetic smoke, unit tests,
+laboratory-evidence synthetic fixture, risk/core/local-tool/HPC contract tests,
+privacy and allowlisted package integrity. The local release suite contains 389
+unit tests, including 19 portable HPC regressions. No private workbook or vendor
+model is needed; GitHub checks Python 3.10 and 3.13 separately.
+
+Before actual model-loaded DeepTMHMM2 execution, require a native-CLI concordance
+pilot as documented in [scheduled execution](hpc-execution.md). Local software
+acceptance and actual model execution remain distinct from experimental accuracy.
+
 ## Offline acceptance
 
 Run `make all-checks-offline`. The suite checks:
@@ -47,3 +59,12 @@ Actual host, SNIPR module sequence, junction choices, receptor surface expressio
 ## Privacy boundaries
 
 `privacy-check` inspects tracked paths when Git is present and the package allowlist in all cases. No public repository is created or changed by these commands. Generated outputs, raw workbooks, snapshots and cache are excluded. Review all source/documentation diffs before any future public release; naming rules do not detect every possible disclosure of unpublished biology.
+# v0.9.0 core evidence acceptance
+
+`make core-evidence-fixture` checks conservative partner attribution, statement
+citations, exact InterPro sequence matching, domain cut/omission, discontinuous
+units, full-reference prediction projection, actual local-output parsing, cache
+corruption, pagination/source failures, immutable overlays and private output
+exclusion. It is included in `make all-checks-offline`; network and laboratory
+workbooks are never CI prerequisites. `scripts/run_core_pilot.py --live` is a
+separate four-public-reference software/annotation pilot, not a functional test.

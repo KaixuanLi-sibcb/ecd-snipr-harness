@@ -1,294 +1,194 @@
-# ECD–SNIPR Harness
+# ECD-SNIPR Harness
 
-**Evidence-bounded antigen-fragment design for SNIPR receivers — at the scale of the human membrane proteome.**
+An evidence-bounded, LLM-assisted workflow for antigen-fragment design and receiver-context review in the **Antibody-Sender -> Antigen-Receiver** configuration.
 
 [![CI](https://github.com/KaixuanLi-sibcb/ecd-snipr-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/KaixuanLi-sibcb/ecd-snipr-harness/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python ≥ 3.10](https://img.shields.io/badge/python-≥3.10-blue.svg)](pyproject.toml)
-[![Version 0.8.1](https://img.shields.io/badge/version-0.8.1-208B83.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.10.2-208B83.svg)](CHANGELOG.md)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+[![License](https://img.shields.io/badge/workflow-MIT-blue.svg)](LICENSE)
 
-`ecd-snipr-harness` turns *"a new membrane target arrived — which fragment should we use, and why?"* into a batch-executable, traceable pipeline. Every input gets an explicit disposition. Where the sequence and annotations support a design, the output includes concrete candidate fragments (coordinates, sequence, rationale and open issues), a screening recommendation, and a reconciled set-level summary. Unsupported or unresolved inputs remain visible rather than receiving invented fragments.
+**Public release: workflow code, documentation, synthetic tests and public-method examples only.** Institutional source workbooks, actual constructs, assay labels, retrospective comparisons and generated analysis outputs are not published. External predictors and model weights are not redistributed.
 
-Working configuration: **Antibody-Sender → Antigen-Receiver** — the antibody sits on the sender cell; the antigen fragment occupies the antigen-recognition position of the SNIPR receiver. The tool designs the *fragment*, not the antibody, and not the sender construct.
+## Overview
 
-## Mechanism-priority triage (v0.8.1)
+Given a defined human membrane-protein set or target list, the workflow proposes sourced antigen fragments for further evaluation at the antigen-recognition position of a SNIPR receiver. It reports exact sequences, reference coordinates, alternatives, rationale, conflicts and unresolved questions. It does not design antibodies or sender PDGFR-LC constructs.
 
-v0.8.1 also recognizes the generic `self-ligand` annotation alias, with negation
-checks. This parser-coverage correction was made after a developmental case audit;
-the initial frozen output is preserved. It is not evidence of held-out prediction.
+The first pass is deterministic. An agent can orchestrate tools, investigate difficult cases and explain evidence; an LLM does not invent sequences, choose unchecked boundaries or approve constructs. This is not a trained ECD-SNIPR compatibility classifier.
 
-The pipeline now asks a second, independent question: **which proposed fragments
-have specific annotation or sequence reasons to prioritize receiver-context checks?**
-It does not read laboratory failure labels, change supported ECD coordinates or
-reinterpret `standard_candidate` as a low-background receiver.
-
-| Review priority | Basis, not a measured functional outcome |
-|---|---|
-| `elevated_review_priority` | Retained annotated processing/interchain association or structural-unit disruption; explicit native extracellular self-association of a full interval |
-| `context_dependent_review` | Unlocalized native shedding/association, glycan/immunoglobulin ligand context, or a hash-bound topology-prediction conflict |
-| `sequence_alert_only` | Local hydropathy, composition or complexity descriptor; never sufficient for high functional risk |
-| `no_specific_signal_detected` | No supported signal from methods actually run; **not a negative result or low risk** |
-| `not_assessed` | Blocked design, invalid sequence or reference conflict |
-
-`receiver_risk.tsv` and `receiver_risk_signals.tsv` record priorities, endpoint-specific
-checks, native-versus-fragment scope, exact source text, coordinates and excluded
-evidence. `receiver_risk_summary.json` reports candidate denominators and flag
-prevalence. All functional confidence remains unestablished without a separately
-validated protocol. Mechanistic priorities are uncalibrated hypotheses, not a
-self-activation classifier. Cases already seen in development are not held-out data.
-
-```bash
-python3 scripts/ecd_snipr_cli.py receiver-risk --run-dir /path/to/verified/run \
-  --reference-set /path/to/analysis-set --outdir /path/to/private/risk-overlay --resume
-python3 scripts/ecd_snipr_cli.py sequence-tools --run-dir /path/to/verified/run \
-  --outdir /path/to/new/sequence-tool-output --biopython
-```
-
-Core local descriptors require only the standard library. Optional
-`pip install '.[sequence-tools]'` enables pinned Biopython ProtParam properties and
-an independent hydropathy cross-check, not SNIPR prediction. Normalized local
-IUPred/DeepTMHMM/SignalP evidence can be supplied to `receiver-risk --tool-evidence`;
-missing tools stay `not_run`, mismatched hashes/coordinates are rejected. No tool
-is auto-installed, and no private sequence is uploaded. Read the
-[risk rules, software scope and validation plan](references/receiver-risk-v080.md).
-
-## Fragment design is not receiver function
-
-**v0.7.0 adds an independent receiver-function evidence layer.** A `standard_candidate`
-is a supported fragment design, not a low-background or functionally compatible receiver.
-`conditional_candidate` is not a prediction of failure. Neither class is a functional risk label.
-
-Every candidate now carries four separate endpoint evidence states: surface expression,
-recognition retention, basal activation and induced response. Without applicable measurements,
-functional risk is `undetermined_not_low_risk`. Even eligible measurements are not converted
-into success/failure without a separately defined acceptance protocol and independent validation.
-
-- `receiver_function.tsv`: four rows per candidate, raw measurement provenance, context, unresolved links and next actions.
-- `receiver_mechanism_review.tsv`: sourced or heuristic review questions, never mechanistic failure predictions.
-- `RECEIVER_FUNCTION.md`: concise interpretation and claim limits; `PI_SUMMARY.md` leads with the two-layer distinction.
-- Generic glycosylation/missing-evidence warnings cannot count as predicted failure hits. No gene blacklist, fitted threshold or risk-count score is added.
-
-Both `screen` and `run` export this layer automatically. To review an existing frozen run
-without rescreening or editing its results:
-
-```bash
-python3 scripts/ecd_snipr_cli.py receiver-audit --run-dir /path/to/verified/run \
-  --outdir /path/to/private/receiver-audit --resume
-python3 scripts/ecd_snipr_cli.py verify-run --run-dir /path/to/new/audit/bundle
-```
-
-Read the [receiver-function policy, sources, deployment and handoff](references/receiver-function-v070.md).
-This improves claim boundaries and evidence handling; it does **not** validate a universal
-self-activation predictor. Historical cases used to develop rules are not a held-out benchmark.
-
-## Validation status and claim boundaries
-
-The v0.8.1 offline suite covers 312 automated tests plus synthetic smoke,
-contract, privacy and package checks. These verify software behavior, sequence
-and coordinate handling, provenance and output integrity, not biological accuracy.
-CI uses synthetic fixtures and never requires institutional workbooks or live predictors.
-
-| Evaluation | What can be reported | What is not established |
+| Independent layer | Question answered | Not established |
 |---|---|---|
-| Candidate coverage | Whether a defined reference has a sourced fragment proposal | Functional compatibility, low background or inducibility |
-| Fragment concordance | Whether a supplied fragment matches a proposed sequence and interval | Complete receptor identity or independent biological validation |
-| Mechanism-priority triage | Source-bounded reasons to prioritize endpoint-specific checks | A calibrated positive/negative classification or failure probability |
-| Receiver outcomes | Applicable measurements, with construct, condition and endpoint provenance | Success/failure without predefined acceptance criteria |
-| Generalization | A future frozen-rule, construct-matched evaluation on independent data | Held-out accuracy from previously inspected cases |
+| Fragment design | Is there a supported candidate under current routes? | Expression or receptor function |
+| Core evidence | Does the exact fragment agree with sequence, domain and predicted topology evidence? | Correct folding or preserved epitopes |
+| Mechanism-priority review | Which specific signals warrant receiver-context checks? | Failure prediction or calibrated risk |
+| Functional evidence | Which construct-matched endpoint measurements exist? | Success without defined acceptance criteria |
 
-Positive antibody-screening records, experiment-performed flags and absence of a
-warning are not interchangeable with receiver-function labels. A useful receiver
-may still warrant mechanism review; a fragment with no detected signal is not
-therefore low risk. Surface expression, recognition retention, basal activation and
-induced response require separate labels and evaluation. No sensitivity,
-specificity, predictive value or held-out accuracy is claimed in this release.
+Read the [complete Chinese workflow and standards](references/workflow-and-standards.zh-CN.md). Formal technical contracts remain in [workflow](references/workflow.md), [screening criteria](references/screening-criteria.md) and [data contracts](references/data-contracts.md).
 
-Institutional examples, experimental counts, source workbooks, actual constructs
-and retrospective comparison tables are intentionally not published. Only the
-general workflow, documentation, synthetic fixtures and public-data methodology
-are released. The next validation milestone is a predefined, independently tested
-protocol, not another retrospective adjustment to a known failure list.
+## Core capabilities
 
-## Pipeline
+- Build a versioned UniProt set; preserve ambiguity, duplicate relationships, scope exclusions and per-entry failures.
+- Select a canonical/reference or requested isoform without asserting laboratory isoform confirmation.
+- Prefer full mature antigen forms; retain sourced alternatives and domain/epitope tradeoffs.
+- Check coordinates, exact slicing, native SP/TM/intramembrane/cytoplasmic overlap, domain cuts and disulfide crossings.
+- Cross-check optional public-accession InterPro/Pfam annotations and exact full-reference local predictions.
+- Execute IUPred2A, DeepTMHMM2 and licensed SignalP 6 locally, with optional portable scheduled HPC workers.
+- Export transparent design recommendations, separate review priorities, candidate FASTA and reconciled coverage.
+- Optionally assemble a real human-reviewed scaffold and reconcile private measurements into four endpoint states.
 
-```mermaid
-flowchart LR
-    A["Target list<br/>or UniProt query"] --> B["<b>build-set</b><br/>identity resolution<br/>fetch · cache · normalize<br/>analysis-reference selection<br/>per-entry disposition"]
-    B --> C["<b>screen</b><br/>source-bounded candidates<br/>blocking checks<br/>four-class recommendation"]
-    C --> D["<b>deliverables</b><br/>design table · candidate FASTA<br/>evidence · candidate tradeoffs<br/>coverage · receiver review plan"]
-    C -.->|"optional, gated by real scaffold<br/>+ human review"| E["fusion assembly &<br/>experiment linkage"]
-    classDef main fill:#E7F3F0,stroke:#208B83,color:#152433
-    classDef opt fill:#F3F6F8,stroke:#667685,stroke-dasharray:5 5,color:#152433
-    class A,B,C,D main
-    class E opt
-```
+## Workflow
 
-Each reference is classified by a transparent decision table — no composite scores:
+~~~mermaid
+flowchart TD
+    A[Defined public set or user list] --> B[Identity resolution and reference selection]
+    B --> C[Versioned fetch, cache and normalization]
+    C --> D[Scope, topology and sourced mature boundaries]
+    D --> E[Candidate generation and four-class design advice]
+    E --> F[Exact fragment and structural-unit checks]
+    P[Optional local SignalP / DeepTMHMM2 / IUPred2A] --> F
+    I[Optional public InterPro/Pfam annotations] --> F
+    F --> G[Independent mechanism-priority review]
+    G --> H[Per-protein results, candidate plans, FASTA and coverage]
+    H --> V[Independent raw / sequence / artifact verification]
+    H -. Real scaffold and named human review .-> S[Optional full fusion assembly]
+    S -. Matched constructs and defined assays .-> X[Expression, recognition, basal and induced endpoints]
+~~~
 
-| Recommendation | Meaning |
+Absent scaffold, review or experiments do not block candidate delivery. They do block unsupported fusion export or functional claims. Frozen designs are never silently edited by a prediction overlay.
+
+## Screening standards
+
+| Recommendation | Interpretation |
 |---|---|
-| **standard_candidate** | A routine candidate with positive sequence/topology/boundary evidence |
-| **conditional_candidate** | A sourced candidate exists, but specific issues (orientation, processing, domain cut, multichain partner, boundary conflict, …) need verification |
-| **no_standard_route** | No routine design under current routes — a route limitation, not a verdict on the protein |
-| **insufficient_evidence** | Core identity/topology/boundary evidence is missing — an evidence state, not a failure |
+| `standard_candidate` | Positive sequence/topology/boundary evidence supports a routine proposal |
+| `conditional_candidate` | A sourced proposal exists with a named orientation, structural-unit or native-context issue |
+| `no_standard_route` | No supported proposal under current routes; not an assertion the protein can never be used |
+| `insufficient_evidence` | Core identity/topology/boundaries are insufficient or conflicting; not biological failure |
 
-Out-of-scope objects (`scope_status`) and technical failures (`processing_status`) are tracked separately; nothing is silently dropped. Missing epitope or risk literature is reported as *not evaluated* — it never silently downgrades a well-bounded candidate.
+Scope and processing status are separate. Set membership, natural cell-surface localization and design scope are distinct. Secreted extensions use a separate denominator.
 
-## What changed in v0.6.0
-
-**Private laboratory evidence can now be recovered and reconciled without changing the public candidate screen.** `lab-evidence` preserves original cells and repeated headers, quarantines uncertain layouts, audits fragment/CDS/reference correspondence, and proposes traceable links for review. Historical data being present is distinguished from its measurement definitions being confirmed.
-
-Self-activation, surface expression, ambiguous reporter gates, project status and downstream serology stay separate. Human-authored cell-hash-bound definitions and an audited actual construct gate quantitative endpoint interpretation. No gene-level functional label, success probability or new ranking is produced. See the [workflow, contracts and deployment guide](references/lab-evidence-v060.md).
-
-```bash
-make lab-evidence-fixture
-python3 scripts/ecd_snipr_cli.py lab-evidence --input /private/source.xlsx \
-    --outdir /private/lab-evidence-output --reference-set /local/public-analysis-set
-```
-
-All resulting laboratory tables, sequences and reports are private outputs excluded from source packages and Git. Fixtures are synthetic; software tests do not establish biological validity. Candidate generation is unchanged.
-
-## Inherited from v0.5.1
-
-The biological unit is not always the gene's entire extracellular repertoire. `full_ecd` means one complete annotated topological interval, not all mature chains or antibody epitopes. New [antigen-unit review](references/antigen-units-v051.md) records exact product-scoped localization, omitted extracellular mature products, fragments spanning distinct processed-chain segments, and cut repeat annotations. These require review, not automatic rejection or invented rescue sequences. Product localization never becomes whole-reference localization; a repeat never becomes an autonomous-domain candidate merely by being annotated.
-
-Single-pass topology can now be recognized from multiple extracellular intervals on the same side of one TM. Segmented mature products still need a product-specific route: intervals are not stitched. Intramembrane segments are separately parsed and excluded from soluble fragments; they are neither extra membrane-spanning helices nor assumed processing sites. The v0.5.0 shared-list reason-code formatting bug is fixed. An unknown epitope record explicitly means no mapping was supplied, not that a literature/database search found nothing.
-
-## Methodology inherited from v0.5.0
-
-- **Design advice and evidence are separate.** Reference, boundary, topology and domain evidence retain their sources and ECO codes. A reviewed UniProt entry is not necessarily experimentally supported at every feature; even a `standard_candidate` may have prediction-supported boundaries.
-- **Primary selection records the tradeoffs.** Among unblocked candidates, prefer no annotated domain/disulfide disruption, then no mapped epitope loss, then the complete mature form, with a stable ID tie-break. Warning counts, length and glycosylation motifs are not a composite score. Unknown epitopes do not demonstrate preserved recognition.
-- **Missing evidence is distinguished from a route limitation.** Route diagnostics identify missing/conflicting core annotations, unsupported routes, blocked proposals, exclusions and technical errors.
-- **Receiver review is explicit.** Candidate comparison, receiver-specific verification plans and a deterministic stratified review queue accompany the fragments. A pending review is neither human approval nor an accuracy estimate.
-- **Reference handling is corrected.** Displayed isoform IDs or an explicit canonical marker replace a guessed `-1`; foreign-isoform coordinates are preserved but not applied to the selected sequence. Public analysis-reference selection does not confirm the laboratory's isoform.
-
-See the [methodology and decision contract](references/methodology-v050.md) and [reference/annotation audit](references/audit-v042.md).
-
-## Candidate rules by topology
-
-| Topology | Treatment |
+| Topology | Current route |
 |---|---|
-| Type I | Full continuous ectodomain, mature form (signal peptide / propeptide removed) |
-| Type II | Same, plus an orientation flag for receiver attachment |
-| GPI-anchored | Mature-form boundaries checked; omega residue retained, GPI signal peptide removed |
-| Multi-pass | Extracellular loops are **never stitched**; only sourced external domains may be conditional alternates |
-| Shed / processed | Sourced processed forms may serve as alternates; fuzzy secondary annotations are deferred, not silently used for blocking |
+| Type I | Sourced continuous mature ECD; remove native SP/TM/tail |
+| Type II | Sourced external region plus attachment-orientation review |
+| GPI | Sourced mature boundary including omega residue; remove downstream GPI signal |
+| Multi-pass | No loop concatenation; only sourced domain alternatives in one annotated external interval |
+| Processed / multi-chain | Preserve product scope, dependencies and omitted repertoire |
+| Organelle / uncertain location | Lumen-facing topology is not natural cell-surface proof |
 
-Blocking checks (coordinate errors, retained native TM/intramembrane/SP/cytoplasmic tail) stay hard failures. Length, cysteine count and glycosylation motifs are warnings, not thresholds.
+Coordinates are **1-based inclusive on the exact selected reference**. Invalid coordinates, sequence mismatch and retained annotated native exclusions remain blocking. Length, cysteine, glycans, hydropathy and disorder are descriptors/review signals, not success thresholds. Primary selection uses explicit structural-integrity, mapped-epitope, antigen-form and stable-ID tradeoffs, not a weighted score.
 
-## Quickstart
+Review tiers are elevated review, context-dependent review, sequence-only alert, no specific signal and not assessed. **No detected signal is not low functional risk.** Annotated and predicted conflicts retain different evidence types; neither establishes self-activation.
 
-Python ≥ 3.10, standard library only — no dependencies, no GPU, no network needed for the test suite.
+## Quick start
 
-```bash
-# Offline synthetic smoke test
-python3 scripts/ecd_snipr_cli.py smoke --outdir /tmp/ecd_smoke
+Python >= 3.10; core/offline tests use the standard library only.
 
-# Screen a target list (accessions or gene names; every row preserved)
-python3 scripts/ecd_snipr_cli.py screen --list examples/target_list_example.tsv \
-    --cache cache --outdir runs/pilot --pilot
+~~~bash
+git clone https://github.com/KaixuanLi-sibcb/ecd-snipr-harness.git
+cd ecd-snipr-harness
+make all-checks-offline
 
-# Build a defined set from a public UniProt query, then screen it
+# Offline synthetic end-to-end run
+python3 scripts/ecd_snipr_cli.py smoke --outdir outputs/demo
+
+# Public pilot; network or populated cache required
+python3 scripts/ecd_snipr_cli.py screen --list examples/public_core_pilot.tsv \
+  --cache cache --outdir outputs/public-pilot --pilot
+~~~
+
+Use the actual immutable bundle path printed by the command, not a guessed ID. `verify-run --run-dir BUNDLE` checks every exported artifact.
+
+## Defined membrane-reference set
+
+~~~bash
 python3 scripts/ecd_snipr_cli.py build-set \
-    --query '(organism_id:9606) AND (reviewed:true) AND (keyword:"Membrane" OR keyword:"Cell membrane")' \
-    --cache cache --outdir sets/human_membrane
-python3 scripts/ecd_snipr_cli.py screen --set sets/human_membrane --outdir runs/human_membrane
-```
+  --query '(organism_id:9606) AND (reviewed:true) AND (keyword:"Membrane" OR keyword:"Cell membrane")' \
+  --cache cache --outdir sets/human-membrane
+python3 scripts/ecd_snipr_cli.py screen --set sets/human-membrane \
+  --outdir outputs/human-membrane --resume
+~~~
 
-Incomplete retrievals are marked `partial` and never reported as complete; `--resume` continues interrupted batches from the content-addressed cache. Optional lab-experience rules (`--lab-rules`) may annotate or downgrade a recommendation — never upgrade; when absent, outputs state *not yet incorporated*.
+This defines membrane-related reviewed human entries, not all genes/isoforms or only plasma-membrane targets. Release, query, reference policy and completeness are recorded. Limited queries and unresolved/fetch/processing gaps stay partial. Input rows, genes, references and fragments are different units. Installation and tests do not launch a full-set task.
+
+## Local tools and independent cross-checks
+
+~~~bash
+python3 scripts/ecd_snipr_cli.py configure-predictors \
+  --iupred-python /outside/repo/iupred-env/bin/python \
+  --dtm-python /outside/repo/dtm-env/bin/python \
+  --dtm-models /outside/repo/dtm-models \
+  --signalp-python /outside/repo/signalp-env/bin/python \
+  --signalp-models /outside/repo/signalp-models \
+  --output /outside/repo/predictor-config.json
+
+python3 scripts/ecd_snipr_cli.py validate-local-tools \
+  --run-dir SCREENING_BUNDLE --reference-set sets/human-membrane \
+  --config /outside/repo/predictor-config.json \
+  --outdir outputs/tool-validation --timeout 3600 --resume
+~~~
+
+See [local setup](references/local-predictors-v0100.md) and [portable HPC execution](references/hpc-execution.md). Importing predictions is not running a model. DeepTMHMM2 is not legacy DeepTMHMM. SignalP requires an official licensed package supplied by the user. Executables, code/data, models, original FASTA and raw outputs are hash-bound. Unsupported residues are retained without substitution.
+
+Optional public-accession InterPro enrichment does not submit sequences:
+
+~~~bash
+python3 scripts/ecd_snipr_cli.py core-evidence --run-dir SCREENING_BUNDLE \
+  --reference-set sets/human-membrane --outdir outputs/core-review \
+  --interpro-cache cache/interpro --interpro-live
+python3 scripts/verify_core_evidence.py --run-dir CORE_BUNDLE \
+  --reference-set sets/human-membrane
+~~~
+
+Omit `--interpro-live` for cache-only use. This retrieves existing matches, not InterProScan execution. The independent verifier re-derives sequence/domain retention; it is a deterministic second pass, not independent biological validation.
 
 ## Outputs
 
-| File | Content |
+| Artifact | Purpose |
 |---|---|
-| `protein_screening.tsv` | One row per analysis object: scope, topology, class, primary candidate, rationale, risks, missing info |
-| `candidate_plan.tsv` / `candidates.json` | Primary + alternate candidates: coordinates, length, sequence, rationale |
-| `candidate_fragments.fasta` | Fragment sequences (labelled `UNVALIDATED`) with junction notes |
-| `summary.json` | Set definition, completeness, per-unit counts, all ratios with explicit denominators |
-| `PI_SUMMARY.md` | Conclusion-first one-page summary |
-| `screening_overview.svg` (+ source data) | Disposition flow and topology × class coverage |
-| `candidate_comparison.tsv` | Primary/alternate relationship and explicit structural/epitope tradeoffs |
-| `receiver_review_plan.tsv` | Actual scaffold, attachment orientation, recognition and processing checks still needed |
-| `manual_review_queue.tsv` | Stratified pending review records; four experimental endpoints remain separate |
-| `antigen_context.tsv` | Per-candidate processed-chain, mature-product repertoire and repeat-boundary review |
-| `processed_product_review.tsv` | Exact named mature-chain localization, retained at product scope rather than projected onto the precursor |
+| `protein_screening.tsv` | Per-object scope, topology, class, primary proposal and rationale |
+| `candidate_plan.tsv`, `candidates.json`, `candidate_fragments.fasta` | Exact primary/alternate fragment plans and sequences |
+| `candidate_comparison.tsv`, `antigen_context.tsv` | Structural, epitope and mature-product tradeoffs |
+| `candidate_core_evidence.tsv`, `candidate_domain_coverage.tsv` | Fragment cross-checks and source coverage |
+| `receiver_risk.tsv`, `receiver_risk_signals.tsv` | Independent source-bounded review priorities |
+| `receiver_function.tsv`, `receiver_review_plan.tsv` | Four endpoint states and outstanding checks |
+| `summary.json`, `PI_SUMMARY.md`, figure/source data | Coverage with explicit denominators, never success rate |
+| Manifests, state/events and source records | Reproducibility, partial/error states and hashes |
 
-## v0.5.1 public-snapshot regression
+Optional [private evidence recovery](references/lab-evidence-v060.md) preserves sheet/row/cell hashes. An experiment-performed flag is not a success label; positive antibody-screening records are not complete receiver-function validation. Inputs and recovered outputs stay private.
 
-The same **7,783 public references** were re-normalized and screened offline from checksum-verified public annotations. This is a frozen accession-list replay of the declared UniProtKB 2026_03 query, **not a new live retrieval or independent biological validation**. It passed **225 unit tests**, offline validate/smoke/privacy/package gates and **18 full-run integrity and sequence checks**, with zero technical failures.
+## Validation and limitations
 
-| Disposition | v0.5.1 references |
-|---|---:|
-| Standard candidate | 562 |
-| Conditional candidate | 1,247 |
-| No supported current route | 1,600 |
-| Insufficient core evidence | 2,286 |
-| Outside design scope | 2,088 |
-| **Total frozen references** | **7,783** |
+Offline checks cover CLI/contracts, synthetic smoke, unit tests, scheduled-worker contracts, privacy and allowlisted packaging. CI runs on Python 3.10 and 3.13 without private workbooks, live APIs or vendor models. Release receipts are recorded in the [changelog](CHANGELOG.md).
 
-The core membrane subset has **1,508/5,349 references with a candidate**; the secreted extension separately has **301/346**. Combined, 1,809 references have primary candidates and 2,105 unblocked fragments are exported. Eight references changed class, topology or primary choice relative to v0.5.0; candidate sequence IDs did not change. Processing/repertoire checks flag 51 primary candidates and a repeat-cut check flags one more. The 114-row purposive review queue is still pending, not an accuracy sample. All 1,809 primaries still lack supplied mapped-epitope evidence; external epitope search and all four experimental endpoints remain unperformed. Historical runs are preserved.
+Software tests, annotation agreement and vendor-CLI concordance are **not SNIPR biological accuracy**. A valid benchmark needs actual construct/scaffold/sender/condition matching and predefined expression, recognition, basal and induced labels. Previously inspected development cases are not held out. No accuracy, sensitivity, specificity or calibrated probability is claimed.
 
-## Historical v0.5.0 full-run status
+Epitope preservation, glycan occupancy, actual-fusion geometry/processing and experimental acceptance remain unestablished. HPA/GTEx, Open Targets/ChEMBL, therapeutic ranking and human-mouse preference are outside this receiver-engineering workflow. InterPro is optional; no new AlphaFold/ESM-derived SNIPR model or full-fusion predictor is claimed.
 
-The v0.5.0 run on **2026-09-20** completed the declared **UniProtKB 2026_03 human reviewed membrane-related query**: **7,783 reference entries**, **7,746 unique gene labels**, **zero technical failures**. Query membership was checked live; public entry annotations retrieved on 2026-09-18 were checksum-verified and normalized again with v0.5.0. This is not a census of all unreviewed proteins or every isoform.
+## Installation, development and governance
 
-| Disposition | Reference entries |
-|---|---:|
-| Standard candidate | 566 |
-| Conditional candidate | 1,243 |
-| No supported route under current annotations | 1,597 |
-| Insufficient core evidence | 2,289 |
-| Outside the declared design scope | 2,088 |
-| **Total queried references** | **7,783** |
-
-The design denominator is **5,695 references**, reported separately as **5,349 core membrane references** and **346 secreted-extension references**. **1,809 references** have a primary candidate; **2,105 unblocked fragments** were exported from **2,129 candidate records**. References and candidate fragments are different counting units. These are **candidate-design coverage counts, not experimental success rates**.
-
-Local verification passed **200 unit tests**, the offline validation/smoke/privacy/package suite and **23 independent full-run integrity and sequence checks**. **All 1,809 primary candidates lack mapped epitope evidence in this run**; 31 have annotated domain/disulfide boundary concerns. The 93-row stratified queue is still pending review. No complete receptor fusions or experimental endpoint labels were produced. One nonblocking reason-code formatting issue is documented in the [public-run record](references/public-run-v050.md).
-
-Only aggregate public-data results and reproducibility metadata are published here. Full runs, annotation caches, private source workbooks and institutional outputs are excluded from Git.
-
-## What it does not do
-
-- **No success prediction.** Screening coverage ≠ functional validation; expression, recognition, basal activity and induced response remain separate experiments.
-- **No fabricated constructs.** Without a real, human-reviewed SNIPR scaffold, only fragments and junction notes are delivered.
-- **No heavy machinery in the batch pass.** Fully deterministic first pass; no per-protein LLM reasoning, no AlphaFold/ESM, no paid APIs.
-
-## Development
-
-```bash
-python3 -m unittest discover -s tests -p 'test_*.py'
-python3 scripts/manage_skill.py validate               # contract + privacy audit
-python3 scripts/manage_skill.py privacy-check
-make all-checks-offline                                # validate, smoke, tests, privacy, package
-```
-
-```
-scripts/ecd_snipr/   core package — acquisition · screening · design · reporting · provenance
-scripts/             CLI + packaging/privacy tooling
-schemas/ references/ examples/ tests/ agents/
-```
-
-Runs are content-addressed and checksummed (`verify-run` re-checks every artifact). Private source workbooks, construct sequences and experimental results must stay outside the release allowlist. Automated path/credential checks are supplemented by a reviewed publication diff; they cannot guarantee detection of unpublished biology embedded in arbitrary text. This repository contains code, schemas, documentation and synthetic/public examples only.
-
-## Installation and migration
-
-```bash
+~~~bash
 make all-checks-offline
 make install-user
-```
+# Default destination: ~/.agents/skills/ecd-snipr-harness
+~~~
 
-Installation validates a staged copy and backs up an existing installation before replacement. It is a separate action, not a side effect of screening. Before reusing old data, rebuild normalized inputs from the preserved public raw cache with the current parser, then screen into a **new** output directory. Screening an old normalized set does not apply the v0.4.2 reference corrections. Preserve historical run bundles and do not reuse old assembly approvals across changed inputs or code.
+Installation validates a staged allowlisted copy and backs up the previous skill. Analysis outputs are not installed. Source data, caches, predictor environments and licensed assets must stay outside the repository. Automated checks supplement, not replace, content/history review.
 
-## Limits and next validation
+~~~text
+scripts/ecd_snipr/   deterministic core and evidence adapters
+scripts/hpc/         scheduled workers, reconciliation, CLI concordance
+references/         workflow, criteria, contracts and deployment
+schemas/            machine-readable contracts
+tests/ examples/    synthetic regressions and public-method examples
+agents/ SKILL.md    bounded agent instructions
+~~~
 
-- The declared query includes organelle, multi-pass and incompletely annotated entries; membership is not evidence of natural cell-surface accessibility.
-- Annotation and lexical context checks are not structural simulations or experimentally calibrated SNIPR predictors. Missing data is not negative evidence.
-- A complete mature fragment can still require processing, a structural partner, specific presentation or a different receiver geometry. Shortening a fragment can lose potential antibody epitopes.
-- Actual receiver scaffold/version, junction configuration and experimental isoform confirmation remain separate prerequisites for reviewed fusion export. Sender PDGFR-LC modules cannot fill those gaps.
-- Surface expression, recognition retention, basal activation and induced response must be measured and associated with a specific construct, sender/antibody and assay context.
+## Next milestone
 
-The next step is independent review of the stratified cases and prospective four-endpoint validation, not a larger uncalibrated success score.
+Freeze rules/versions, independently review representative designs and collect construct-matched four-endpoint measurements under predefined acceptance criteria. Evaluate by protein/family or prospectively. Targeted structural/epitope analyses should answer specific unresolved questions, not optimize a generic score against a known failure list.
 
-## License
+## Methodological origin and license
 
-MIT — see [LICENSE](LICENSE).
+The workflow formalizes antigen-fragment engineering and experimental-review practices developed through internal discussions in the Meng Lab, Shanghai Institute of Biochemistry and Cell Biology, Chinese Academy of Sciences. It is a reproducible scaffold, not a claim of biological validation.
+
+Workflow code is [MIT licensed](LICENSE). External software, data and weights retain their own terms; this license does not permit their redistribution.

@@ -3,6 +3,15 @@ name: ecd-snipr-harness
 description: Design and review sourced human membrane-protein extracellular fragments for a laboratory SNIPR Antigen-Receiver paired with an Antibody-Sender. Use for batch ECD candidate planning, per-target screening recommendations over a defined protein set, scaffold-aware fusion review, epitope-retention checks, and context-specific experimental evidence tracking. Not for antibody design, antigen-sender qDis engineering, therapeutic target ranking, or unsupported SNIPR success prediction.
 ---
 
+## Current integrated workflow (v0.10.2)
+
+Read [the complete workflow and standards](references/workflow-and-standards.zh-CN.md)
+before a batch run. Keep design advice, core-evidence checks, mechanism-review
+priority and four experimental endpoints independent. For scheduled local tools,
+follow [the portable HPC guide](references/hpc-execution.md); require exact native
+CLI concordance before adopting the DeepTMHMM2 compatibility worker. Never package
+institutional records, generated results, configurations, licenses or model assets.
+
 # ECD-SNIPR Harness
 
 ## Scope and routing
@@ -25,6 +34,25 @@ When the actual scaffold is not yet supplied, read the [source-checked public re
 8. Lead reports with research conclusions and coverage with explicit denominators — not approval counts. Label outputs 候选设计覆盖/初筛建议, never experimental success rates; label small runs pilot.
 
 ## Execution
+Read [local predictor execution](references/local-predictors-v0100.md) before using
+`configure-predictors`, `predict-local` or `validate-local-tools`. Install tools/models
+outside the skill. Actual execution and version/hash verification are separate from
+an importer; DeepTMHMM2 is not legacy DeepTMHMM and uses CPU on Apple Silicon.
+Requested unavailable tools make the tool run partial. Never submit private sequences
+to hosted services, relabel empty output as negative, or call disorder/topology
+agreement SNIPR functional accuracy. Preserve frozen candidates and four endpoints.
+
+Read [core evidence v0.9.0](references/core-evidence-v090.md). Preserve the candidate
+engine and design classes; independently cross-check exact fragments and
+structural units. `core-evidence` supports optional public-accession-only InterPro
+retrieval with exact reference-sequence equality, cache/version/hash checks and
+visible conflicts. `import-prediction` reads existing local outputs plus original
+FASTA; it never executes a predictor or submits a private sequence. Full-reference
+coordinates require explicit projection, not silent transfer. Partner association
+is not reference self-association; unresolved subjects stay unresolved. Family
+classification is not an autonomous domain, correlated hits are not independent
+votes, and no conflict detected never establishes low functional risk.
+
 Read [receiver risk v0.8.0](references/receiver-risk-v080.md). Every new `screen` and
 `run` includes an independent mechanism-priority layer, with source and scope checks.
 Use `receiver-risk` plus the exact reference set for immutable historical overlays.

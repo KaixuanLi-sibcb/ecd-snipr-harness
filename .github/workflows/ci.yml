@@ -1,5 +1,7 @@
 name: offline-contracts
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   offline:
     runs-on: ubuntu-latest
@@ -12,4 +14,5 @@ jobs:
         with:
           python-version: '${{ matrix.python }}'
       - run: make all-checks-offline
-# Only synthetic local fixtures; never upload private run bundles as CI artifacts.
+# Includes portable HPC contracts, not vendor inference or private data.
+# Never upload generated run bundles as CI artifacts.

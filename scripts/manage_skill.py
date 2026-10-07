@@ -18,17 +18,19 @@ from ecd_snipr.common import file_hash, read_json
 from ecd_snipr.contracts import validate_project
 from ecd_snipr import __version__
 
-FORBIDDEN = {"local_data", "real_data_output", "smoke_test_output", "live_validation_output", "coverage_output", "private_output", "lab_evidence_output", "outputs", "cache", ".git", "__pycache__", ".pytest_cache", "dist", "backup"}
+FORBIDDEN = {"local_data", "real_data_output", "smoke_test_output", "live_validation_output", "coverage_output", "private_output", "lab_evidence_output", "outputs", "cache", ".git", "__pycache__", ".pytest_cache", "dist", "backup", "vendor", "vendor_tools", "models", "checkpoints", "envs"}
 PRIVATE_ARTIFACTS = {"raw_inventory.json", "source_cells.tsv", "semantic_review_template.json", "assay_evidence.tsv",
                      "fragment_reference_audit.tsv", "construct_link_candidates.tsv", "assay_definition_groups.tsv",
                      "LAB_EVIDENCE_REPORT.md", "row_records.json", "receiver_function.tsv",
                      "receiver_mechanism_review.tsv", "receiver_function_summary.json", "RECEIVER_FUNCTION.md",
                      "source_link.json", "receiver_risk.tsv", "receiver_risk_signals.tsv", "receiver_risk_summary.json",
-                     "risk_policy_snapshot.json", "sequence_descriptors.json", "sequence_tools_summary.json"}
+                     "risk_policy_snapshot.json", "sequence_descriptors.json", "sequence_tools_summary.json",
+                     "candidate_core_evidence.tsv", "candidate_domain_coverage.tsv", "core_evidence_summary.json", "core_source_records.json",
+                     "tool_evidence.json", "predictor_summary.json", "predictor_status.tsv", "invocation.json"}
 
 
 def forbidden(path):
-    return any(p in FORBIDDEN or p.endswith(".egg-info") or p.startswith(("real_data_output", "smoke_test_output")) for p in path.parts) or path.suffix.lower() in {".xlsx", ".xls", ".zip", ".pyc", ".pem", ".key"} or path.name in {".DS_Store", ".env"} | PRIVATE_ARTIFACTS
+    return any(p in FORBIDDEN or p.endswith(".egg-info") or p.startswith(("real_data_output", "smoke_test_output", "prediction_output", "tools_output", "local_tools", "private_")) for p in path.parts) or path.suffix.lower() in {".xlsx", ".xls", ".docx", ".zip", ".gz", ".pyc", ".pem", ".key", ".pt", ".ckpt"} or path.name in {".DS_Store", ".env", "prediction_jobs.json", "pilot_jobs.json", "predictor-config.json"} | PRIVATE_ARTIFACTS
 
 
 def assets(root):
@@ -74,9 +76,11 @@ def validate(root):
     project_version = re.search(r'^version\s*=\s*"([^"]+)"', (root / "pyproject.toml").read_text(), re.M)
     checks["version_consistency"] = bool(project_version and project_version.group(1) ==
                                          read_json(root / "manifest.json").get("version") == __version__)
-    for path in root.joinpath("scripts").glob("*.py"):
+    cli_paths = list(root.joinpath("scripts").glob("*.py"))
+    cli_paths += [p for p in root.joinpath("scripts/hpc").glob("*.py") if p.name!='dtm2_api_compat.py']
+    for path in cli_paths:
         command = subprocess.run([sys.executable, str(path), "--help"], capture_output=True)
-        checks[path.name + "_help"] = command.returncode == 0
+        checks[str(path.relative_to(root)) + "_help"] = command.returncode == 0
     validate_project(read_json(root / "examples/synthetic_project.json"))
     checks["fixture_contract"] = True
     checks["privacy"] = privacy(root)["passed"]

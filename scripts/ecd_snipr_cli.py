@@ -14,6 +14,8 @@ from ecd_snipr.screening import run_screening
 from ecd_snipr.uniprot import fetch, normalize
 from ecd_snipr.receiver_function import audit_run
 from ecd_snipr.receiver_risk import audit_risk, run_sequence_tools
+from ecd_snipr.predictor_import import import_prediction
+from ecd_snipr.local_predictors import configure, run_predictors, verify_predictions, validate_local_tools, TOOLS
 
 
 def new_output(path, value):
@@ -47,6 +49,43 @@ def parser():
     sub.add_argument("--reference-set", help="Existing build-set directory; offline exact fragment matching only")
     sub.add_argument("--construct-run", help="Verified legacy run bundle containing construct_audit.json")
     sub.add_argument("--resume", action="store_true")
+    sub = commands.add_parser("core-evidence", help="Immutable exact-fragment domain/topology cross-check; optional accession-only InterPro lookup, no sequence upload")
+    sub.add_argument("--run-dir", required=True)
+    sub.add_argument("--reference-set", required=True)
+    sub.add_argument("--outdir", required=True)
+    sub.add_argument("--interpro-cache", help="Content-addressed public InterPro snapshots; cache-only by default")
+    sub.add_argument("--interpro-live", action="store_true", help="Explicit public-accession GET only; does not submit sequences or execute InterProScan")
+    sub.add_argument("--tool-evidence", help="Local normalized predictions JSON list; fragment or exact full_reference scope")
+    sub.add_argument("--resume", action="store_true")
+    sub = commands.add_parser("import-prediction", help="Import local IUPred residue table, DeepTMHMM 3-line output or SignalP positive GFF3; never runs/uploads a sequence")
+    sub.add_argument("--software", choices=['IUPred2A','IUPred3','AIUPred','DeepTMHMM','DeepTMHMM2','SignalP'], required=True)
+    sub.add_argument("--input", required=True, help="Actual local raw predictor output")
+    sub.add_argument("--input-fasta", required=True, help="Actual single-reference input FASTA; accession and residues checked")
+    sub.add_argument("--reference", required=True, help="Normalized sourced protein JSON")
+    sub.add_argument("--version", required=True)
+    sub.add_argument("--parameters", required=True, help="JSON object with actual invocation settings")
+    sub.add_argument("--output", required=True, help="New JSON list for --tool-evidence")
+    sub = commands.add_parser('configure-predictors',help='Probe and hash local predictor installations; no inference/downloads')
+    for flag in ('iupred-python','dtm-python','dtm-models','signalp-python','signalp-models'):
+        sub.add_argument('--'+flag)
+    sub.add_argument('--output',required=True,help='New local configuration outside repository; paths/models stay private')
+    sub = commands.add_parser('predict-local',help='Execute configured local tools, isolate errors, export exact-reference predictions; not functional accuracy')
+    sub.add_argument('--reference-set',required=True)
+    sub.add_argument('--config',required=True)
+    sub.add_argument('--outdir',required=True)
+    sub.add_argument('--tools',nargs='+',choices=TOOLS,default=list(TOOLS))
+    sub.add_argument('--timeout',type=int,default=3600,help='IUPred whole-worker / other tool per-reference seconds')
+    sub.add_argument('--limit',type=int,help='Pilot subset limit; marks partial against original set denominator')
+    sub.add_argument('--resume',action='store_true')
+    sub = commands.add_parser('validate-local-tools',help='Local prediction -> exact-reference selection -> frozen core/risk overlay; not a functional benchmark')
+    for name in ('run-dir','reference-set','config','outdir'):
+        sub.add_argument('--'+name,required=True)
+    sub.add_argument('--interpro-cache')
+    sub.add_argument('--tools',nargs='+',choices=TOOLS,default=list(TOOLS))
+    sub.add_argument('--timeout',type=int,default=3600)
+    sub.add_argument('--resume',action='store_true')
+    sub = commands.add_parser('verify-predictions',help='Check all nested predictor outputs and bound raw inputs, not only summary files')
+    sub.add_argument('--run-dir',required=True)
     sub = commands.add_parser("receiver-risk", help="Name-blind mechanism-priority overlay using exact public reference annotations; no failure labels or success probabilities")
     sub.add_argument("--run-dir", required=True)
     sub.add_argument("--reference-set", required=True)
@@ -155,6 +194,32 @@ def main(argv=None):
         result = audit_risk(args.run_dir, args.reference_set, args.outdir, args.tool_evidence, args.resume)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0 if result['summary']['completeness'] == 'complete' else 3
+    elif args.command == "core-evidence":
+        result = audit_risk(args.run_dir,args.reference_set,args.outdir,args.tool_evidence,args.resume,
+                            args.interpro_cache,args.interpro_live)
+        print(json.dumps(result,ensure_ascii=False,indent=2))
+        return 0 if result['summary']['completeness'] == 'complete' else 3
+    elif args.command == "import-prediction":
+        new_output(args.output,[import_prediction(args.software,args.input,args.input_fasta,
+            read_json(args.reference),args.version,json.loads(args.parameters))])
+        print(json.dumps({'status':'imported_local_output','software':args.software,'prediction_execution':'not_performed_by_importer'}))
+    elif args.command == 'configure-predictors':
+        result = configure(args.output,args.iupred_python,args.dtm_python,args.dtm_models,
+                           args.signalp_python,args.signalp_models)
+        print(json.dumps({name:tool['status'] for name,tool in result['tools'].items()},indent=2))
+    elif args.command == 'predict-local':
+        result = run_predictors(args.reference_set,args.config,args.outdir,args.tools,args.resume,args.timeout,args.limit)
+        print(json.dumps(result,ensure_ascii=False,indent=2))
+        return 0 if result['summary']['completeness']=='complete' else 3
+    elif args.command == 'validate-local-tools':
+        result = validate_local_tools(args.run_dir,args.reference_set,args.config,args.outdir,
+            args.tools,args.timeout,args.interpro_cache,args.resume)
+        print(json.dumps(result,ensure_ascii=False,indent=2))
+        return 0 if result['completeness']=='complete' else 3
+    elif args.command == 'verify-predictions':
+        verified = verify_predictions(args.run_dir)
+        print(json.dumps({'verified':verified}))
+        return 0 if verified else 1
     elif args.command == "sequence-tools":
         print(json.dumps(run_sequence_tools(args.run_dir, args.outdir, args.biopython), ensure_ascii=False, indent=2))
     elif args.command == "verify-run":

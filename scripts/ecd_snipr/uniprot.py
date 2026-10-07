@@ -126,8 +126,12 @@ def normalize(raw):
         if target:
             texts = [t.get("value", "") for t in comment.get("texts", []) if t.get("value")]
             if texts:
+                units = [{'text': t['value'], 'evidences': t.get('evidences', []),
+                          'eco': [e.get('evidenceCode', '') for e in t.get('evidences', [])]}
+                         for t in comment.get('texts', []) if t.get('value')]
                 p.setdefault(target, []).append(
-                    {"text": " ".join(texts),
+                    {"text": " ".join(texts), "statements": units,
+                     "evidences": comment.get('evidences', []),
                      "eco": [e.get("evidenceCode", "") for e in comment.get("evidences", [])]})
     p["raw_locations"] = raw_locations
     p["reference_locations"] = locations

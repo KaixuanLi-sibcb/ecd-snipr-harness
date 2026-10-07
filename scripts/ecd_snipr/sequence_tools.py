@@ -67,24 +67,38 @@ def descriptors(seq, use_biopython=False):
     return result
 
 
-def validate_prediction(record, candidate):
+def validate_prediction(record, candidate, protein=None):
     """Accept normalized local outputs only, bound to this exact fragment.
 
 The caller retains rejected records. No coordinates from a full protein are
 silently transferred to a truncated fragment.
 """
-    if record.get('software') not in {'IUPred2A', 'IUPred3', 'AIUPred', 'DeepTMHMM', 'SignalP'}:
+    if record.get('software') not in {'IUPred2A', 'IUPred3', 'AIUPred', 'DeepTMHMM', 'DeepTMHMM2', 'SignalP'}:
         raise ValueError('Unsupported predictor')
-    if record.get('candidate_id') != candidate.get('candidate_id') or record.get('sequence_sha256') != sequence_hash(candidate['sequence']):
-        raise ValueError('Predictor identity/sequence hash mismatch')
-    if record.get('input_scope') != 'candidate_fragment' or record.get('coordinate_system') != '1-based-inclusive':
-        raise ValueError('Predictor input scope/coordinates must explicitly match candidate fragment')
+    scope = record.get('input_scope')
+    if record.get('coordinate_system') != '1-based-inclusive' or scope not in {'candidate_fragment', 'full_reference'}:
+        raise ValueError('Predictor input scope/coordinates must explicitly match fragment or full reference')
+    if scope == 'candidate_fragment':
+        if record.get('candidate_id') != candidate.get('candidate_id') or record.get('sequence_sha256') != sequence_hash(candidate['sequence']):
+            raise ValueError('Predictor identity/sequence hash mismatch')
+        n = len(candidate['sequence'])
+        start, end = 1, n
+    else:
+        from .common import interval, sourced
+        if not protein or not sourced(protein):
+            raise ValueError('Full-reference predictor requires sourced reference')
+        ref = sequence(protein['sequence'])
+        start, end = interval(candidate, len(ref))
+        if record.get('accession') != protein.get('accession') or record.get('sequence_sha256') != sequence_hash(ref):
+            raise ValueError('Full-reference predictor identity/sequence hash mismatch')
+        if ref[start-1:end] != candidate['sequence'] or candidate.get('reference_sha256') != digest(ref):
+            raise ValueError('Candidate/reference projection conflict')
+        n = len(ref)
     if not record.get('version') or not isinstance(record.get('parameters'), dict) or not record.get('source'):
         raise ValueError('Predictor version, parameters and source required')
     checksum = record.get('raw_output_sha256', '')
     if len(checksum) != 64 or any(c not in '0123456789abcdef' for c in checksum):
         raise ValueError('Raw predictor output SHA256 required')
-    n = len(candidate['sequence'])
     if record['software'] in {'IUPred2A', 'IUPred3', 'AIUPred'}:
         scores = record.get('scores')
         if not isinstance(scores, list) or len(scores) != n or any(type(v) not in {int,float} or not math.isfinite(v) or not 0 <= v <= 1 for v in scores):
@@ -93,6 +107,17 @@ silently transferred to a truncated fragment.
         if not isinstance(record.get('regions'), list):
             raise ValueError('Topology predictor needs explicit regions list')
         for r in record['regions']:
-            if r.get('kind') not in {'transmembrane','signal_peptide'} or type(r.get('start')) is not int or type(r.get('end')) is not int or not 1 <= r['start'] <= r['end'] <= n:
+            if r.get('kind') not in {'transmembrane','signal_peptide','cytoplasmic','inside','outside','extracellular','lumenal','periplasmic','reentrant','interfacial','transit_peptide'} or type(r.get('start')) is not int or type(r.get('end')) is not int or not 1 <= r['start'] <= r['end'] <= n:
                 raise ValueError('Invalid predicted region')
-    return dict(record, evidence_kind='prediction', functional_validation='not_performed', record_sha256=digest(record))
+    bound = dict(record, evidence_kind='prediction', functional_validation='not_performed', record_sha256=digest(record),
+                 evaluated_candidate_id=candidate.get('candidate_id'), projection_interval=[start,end],
+                 interpretation_limit='Native outside may be organelle lumen; isolated fragment SignalP cannot establish fusion secretion.')
+    if scope == 'full_reference':
+        if record.get('scores') is not None:
+            bound['scores'] = record['scores'][start-1:end]
+        if record.get('regions') is not None:
+            bound['regions'] = [dict(r, start=max(start,r['start'])-start+1,
+                end=min(end,r['end'])-start+1, reference_interval=[r['start'],r['end']])
+                for r in record['regions'] if r['start'] <= end and start <= r['end']]
+            bound['not_retained_regions'] = [r for r in record['regions'] if r['end'] < start or r['start'] > end]
+    return bound

@@ -1,5 +1,53 @@
 # Changelog
 
+## v0.10.2 - 2026-10-07 (complete public workflow and standards)
+
+- Synchronize the previously unpublished v0.9.0 exact-fragment/core-evidence and
+  v0.10.0/v0.10.1 local predictor layers into the existing public workflow repository.
+- Add portable scheduled IUPred2A/DeepTMHMM2 workers, licensed SignalP CPU batches,
+  native-CLI concordance, scope preparation and independent raw-result reconciliation.
+  External tools/models remain user supplied. No institutional deployment settings,
+  licenses, prediction cohorts or experimental data are included.
+- Preserve candidate generation, boundaries, primary-selection rules and mechanism
+  triage. Add worker-contract, missing-result, unsupported-residue, partial-scope,
+  immutable-resume and synthetic batch-separation regressions; no functional model.
+- Replace the chronological homepage with a unified four-layer workflow. Add the
+  complete Chinese workflow/criteria and portable HPC deployment guide, and align
+  skill, contracts and offline CI. Harden private/vendor asset exclusions.
+- Local release acceptance: 389 unit tests, synthetic end-to-end smoke, CLI/contract
+  validation, 19 scheduled-worker regressions, privacy and allowlisted packaging
+  pass. Vendor models are not executed by these tests; this is software acceptance,
+  not SNIPR accuracy. GitHub CI is reported separately by its actual run status.
+
+## v0.10.1 - SignalP installation metadata correction
+
+- Probe the official `signalp6` distribution while importing its `signalp`
+  module. Preserve actual installed version and package/model hashes.
+- This is an installation fix only: candidate routes, risk rules and experimental
+  interpretation are unchanged. Vendor tools and weights remain external.
+
+## v0.10.0 - Local predictor execution
+
+- Add separate hashed local installation configuration and real IUPred2,
+  DeepTMHMM2 CPU and licensed SignalP execution adapters, with per-reference
+  provenance/errors, immutable output and completed-bundle reuse.
+- Add end-to-end prediction -> exact-reference validation -> core/risk overlay;
+  missing requested tools keep validation partial. No candidate boundary changes.
+- Distinguish DeepTMHMM2 labels from legacy predictions; import explicit SignalP
+  no-SP summary rather than treating an empty GFF3 as a negative result.
+- Document setup prerequisites and experimental-accuracy eligibility. No lab
+  outcome labels, gene-specific failure rules or success thresholds are added.
+- Tools, model weights, private inputs and generated outputs remain outside packages.
+
+## 0.9.0 - 2026-10-06 (core evidence attribution and fragment cross-checks)
+
+- Preserve candidate generation, coordinates, primary selection, four design classes and actual-scaffold assembly gates.
+- Add a conservative general reference/partner/unresolved statement-attribution policy; retain statement-specific UniProt citations. An interaction with another homodimer is not target self-association. No case list, laboratory outcomes or gene exceptions are inputs.
+- Add optional public-accession InterPro/Pfam annotation retrieval with source versions, complete pagination, exact sequence equality, immutable raw snapshots, offline reuse and error/conflict states. Domain/family/superfamily/repeat and discontinuous matches remain distinct; correlated hits are not independent votes.
+- Add separate candidate core/domain coverage outputs to every screen/run and immutable `core-evidence` overlays. New domain cuts/exclusion conflicts prompt review without silently replacing designs or claiming receptor failure.
+- Import actual local IUPred tables, DeepTMHMM three-line and SignalP positive GFF3 outputs with original FASTA/version/parameters/hashes; project full-reference coordinates exactly. No third-party predictor execution, weights redistribution, private-sequence submission or full-fusion prediction is claimed.
+- Add 43 focused regressions, an independent sequence/domain-retention result verifier and a four-public-reference topology pilot entry point. Accept semantically identical string/integer taxon IDs and retain/hash-check original API response bytes after an explicitly partial first integration attempt. All outputs/caches remain excluded from source packages and Git. Tests establish software behavior, not biological accuracy.
+
 ### Public v0.8.1 repository synchronization - 2026-10-06
 
 - Publish the allowlisted workflow and synthetic regression suite, including the independent four-endpoint evidence and mechanism-priority layers. Do not publish institutional source workbooks, actual constructs, case lists, outcome counts or retrospective comparisons.
